@@ -1,4 +1,4 @@
 /burakcan_dataset.csv
 /model.png
 /model_summary.png
-/dataset/.*
+/dataset/*
