@@ -9,7 +9,6 @@ from rdkit.Chem.Draw import IPythonConsole
 from rdkit.Chem.Draw import MolsToGridImage
 
 #%%
-
 def molecule_from_smiles(smiles):
     # MolFromSmiles(m, sanitize=True) should be equivalent to
     # MolFromSmiles(m, sanitize=False) -> SanitizeMol(m) -> AssignStereochemistry(m, ...)
@@ -27,7 +26,6 @@ def molecule_from_smiles(smiles):
 
 
 #%%
-
 
 class Featurizer:
     def __init__(self, allowable_sets):
@@ -340,7 +338,7 @@ def MPNNModel(
     return model
 #%%
 
-raw = pd.read_csv('GDSC_drug_name_SMILES_and_ECFP4_v2.txt', sep='\t')
+raw = pd.read_csv('dataset/GDSC_drug_name_SMILES_and_ECFP4_v2.txt', sep='\t')
 
 smiles_dump = raw.iloc[0][1]
 # smiles_dump = 'CC(=O)Oc1ccccc1C(O)=O'
