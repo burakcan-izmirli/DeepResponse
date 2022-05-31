@@ -1,7 +1,7 @@
-import pandas as pd
-import tensorflow as tf
-import numpy as np
-from rdkit import Chem
+import pandas as pd #1.3.4
+import tensorflow as tf #2.6.0
+import numpy as np #1.19.5
+from rdkit import Chem #2022.03.2
 from tensorflow import keras
 from tensorflow.keras import layers
 from rdkit import RDLogger
