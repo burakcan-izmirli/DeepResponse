@@ -1,31 +1,31 @@
-import pandas as pd #1.3.4
-import tensorflow as tf #2.6.0
-import numpy as np #1.19.5
-from rdkit import Chem #2022.03.2
+import pandas as pd  # 1.3.4
+import tensorflow as tf  # 2.6.0
+import numpy as np  # 1.19.5
+from rdkit import Chem  # 2022.03.2
 from tensorflow import keras
 from tensorflow.keras import layers
 from rdkit import RDLogger
 from rdkit.Chem.Draw import IPythonConsole
 from rdkit.Chem.Draw import MolsToGridImage
 
-#%%
+
+# %%
 def molecule_from_smiles(smiles):
     # MolFromSmiles(m, sanitize=True) should be equivalent to
     # MolFromSmiles(m, sanitize=False) -> SanitizeMol(m) -> AssignStereochemistry(m, ...)
-    molecule = Chem.MolFromSmiles(smiles, sanitize=False)
+    molecule = Chem.MolFromSmiles(smiles, sanitize = False)
 
     # If sanitization is unsuccessful, catch the error, and try again without
     # the sanitization step that caused the error
-    flag = Chem.SanitizeMol(molecule, catchErrors=True)
+    flag = Chem.SanitizeMol(molecule, catchErrors = True)
     if flag != Chem.SanitizeFlags.SANITIZE_NONE:
-        Chem.SanitizeMol(molecule, sanitizeOps=Chem.SanitizeFlags.SANITIZE_ALL ^ flag)
+        Chem.SanitizeMol(molecule, sanitizeOps = Chem.SanitizeFlags.SANITIZE_ALL ^ flag)
 
-    Chem.AssignStereochemistry(molecule, cleanIt=True, force=True)
+    Chem.AssignStereochemistry(molecule, cleanIt = True, force = True)
     return molecule
 
 
-
-#%%
+# %%
 
 class Featurizer:
     def __init__(self, allowable_sets):
@@ -84,7 +84,7 @@ class BondFeaturizer(Featurizer):
 
 
 atom_featurizer = AtomFeaturizer(
-    allowable_sets={
+    allowable_sets = {
         "symbol": {"B", "Br", "C", "Ca", "Cl", "F", "H", "I", "N", "Na", "O", "P", "S"},
         "n_valence": {0, 1, 2, 3, 4, 5, 6},
         "n_hydrogens": {0, 1, 2, 3, 4},
@@ -93,12 +93,14 @@ atom_featurizer = AtomFeaturizer(
 )
 
 bond_featurizer = BondFeaturizer(
-    allowable_sets={
+    allowable_sets = {
         "bond_type": {"single", "double", "triple", "aromatic"},
         "conjugated": {True, False},
     }
 )
-#%%
+
+
+# %%
 
 def graph_from_molecule(molecule):
     # Initialize graph
@@ -121,13 +123,12 @@ def graph_from_molecule(molecule):
     return np.array(atom_features), np.array(bond_features), np.array(pair_indices)
 
 
-#%%
+# %%
 def graphs_from_smiles(smiles):
     # Initialize graphs
     atom_features_list = []
     bond_features_list = []
     pair_indices_list = []
-
 
     molecule = molecule_from_smiles(smiles)
     atom_features, bond_features, pair_indices = graph_from_molecule(molecule)
@@ -138,13 +139,13 @@ def graphs_from_smiles(smiles):
 
     # Convert lists to ragged tensors for tf.data.Dataset later on
     return (
-        tf.ragged.constant(atom_features_list, dtype=tf.float32),
-        tf.ragged.constant(bond_features_list, dtype=tf.float32),
-        tf.ragged.constant(pair_indices_list, dtype=tf.int64),
+        tf.ragged.constant(atom_features_list, dtype = tf.float32),
+        tf.ragged.constant(bond_features_list, dtype = tf.float32),
+        tf.ragged.constant(pair_indices_list, dtype = tf.int64),
     )
 
 
-#%%
+# %%
 def prepare_batch(x_batch, y_batch):
     """Merges (sub)graphs of batch into a single global (disconnected) graph
     """
@@ -165,10 +166,10 @@ def prepare_batch(x_batch, y_batch):
     gather_indices = tf.repeat(molecule_indices[:-1], num_bonds[1:])
     increment = tf.cumsum(num_atoms[:-1])
     increment = tf.pad(tf.gather(increment, gather_indices), [(num_bonds[0], 0)])
-    pair_indices = pair_indices.merge_dims(outer_axis=0, inner_axis=1).to_tensor()
+    pair_indices = pair_indices.merge_dims(outer_axis = 0, inner_axis = 1).to_tensor()
     pair_indices = pair_indices + increment[:, tf.newaxis]
-    atom_features = atom_features.merge_dims(outer_axis=0, inner_axis=1).to_tensor()
-    bond_features = bond_features.merge_dims(outer_axis=0, inner_axis=1).to_tensor()
+    atom_features = atom_features.merge_dims(outer_axis = 0, inner_axis = 1).to_tensor()
+    bond_features = bond_features.merge_dims(outer_axis = 0, inner_axis = 1).to_tensor()
 
     return (atom_features, bond_features, pair_indices, molecule_indicator), y_batch
 
@@ -179,17 +180,18 @@ def MPNNDataset(X, y, batch_size=32, shuffle=False):
         dataset = dataset.shuffle(1024)
     return dataset.batch(batch_size).map(prepare_batch, -1).prefetch(-1)
 
+
 class EdgeNetwork(layers.Layer):
     def build(self, input_shape):
         self.atom_dim = input_shape[0][-1]
         self.bond_dim = input_shape[1][-1]
         self.kernel = self.add_weight(
-            shape=(self.bond_dim, self.atom_dim * self.atom_dim),
-            initializer="glorot_uniform",
-            name="kernel",
+            shape = (self.bond_dim, self.atom_dim * self.atom_dim),
+            initializer = "glorot_uniform",
+            name = "kernel",
         )
         self.bias = self.add_weight(
-            shape=(self.atom_dim * self.atom_dim), initializer="zeros", name="bias",
+            shape = (self.atom_dim * self.atom_dim), initializer = "zeros", name = "bias",
         )
         self.built = True
 
@@ -204,15 +206,15 @@ class EdgeNetwork(layers.Layer):
 
         # Obtain atom features of neighbors
         atom_features_neighbors = tf.gather(atom_features, pair_indices[:, 1])
-        atom_features_neighbors = tf.expand_dims(atom_features_neighbors, axis=-1)
+        atom_features_neighbors = tf.expand_dims(atom_features_neighbors, axis = -1)
 
         # Apply neighborhood aggregation
         transformed_features = tf.matmul(bond_features, atom_features_neighbors)
-        transformed_features = tf.squeeze(transformed_features, axis=-1)
+        transformed_features = tf.squeeze(transformed_features, axis = -1)
         aggregated_features = tf.math.unsorted_segment_sum(
             transformed_features,
             pair_indices[:, 0],
-            num_segments=tf.shape(atom_features)[0],
+            num_segments = tf.shape(atom_features)[0],
         )
         return aggregated_features
 
@@ -256,15 +258,14 @@ class MessagePassing(layers.Layer):
             self.batch_size = batch_size
 
     def call(self, inputs):
-
         atom_features, molecule_indicator = inputs
 
-        # Obtain subgraphs
+        # Obtain sub graphs
         atom_features_partitioned = tf.dynamic_partition(
             atom_features, molecule_indicator, self.batch_size
         )
 
-        # Pad and stack subgraphs
+        # Pad and stack sub graphs
         num_atoms = [tf.shape(f)[0] for f in atom_features_partitioned]
         max_num_atoms = tf.reduce_max(num_atoms)
         atom_features_stacked = tf.stack(
@@ -272,13 +273,13 @@ class MessagePassing(layers.Layer):
                 tf.pad(f, [(0, max_num_atoms - n), (0, 0)])
                 for f, n in zip(atom_features_partitioned, num_atoms)
             ],
-            axis=0,
+            axis = 0,
         )
 
-        # Remove empty subgraphs (usually for last batch in dataset)
+        # Remove empty sub graphs (usually for last batch in dataset)
         gather_indices = tf.where(tf.reduce_sum(atom_features_stacked, (1, 2)) != 0)
-        gather_indices = tf.squeeze(gather_indices, axis=-1)
-        return tf.gather(atom_features_stacked, gather_indices, axis=0)
+        gather_indices = tf.squeeze(gather_indices, axis = -1)
+        return tf.gather(atom_features_stacked, gather_indices, axis = 0)
 
 
 class TransformerEncoderReadout(layers.Layer):
@@ -290,7 +291,7 @@ class TransformerEncoderReadout(layers.Layer):
         self.partition_padding = PartitionPadding(batch_size)
         self.attention = layers.MultiHeadAttention(num_heads, embed_dim)
         self.dense_proj = keras.Sequential(
-            [layers.Dense(dense_dim, activation="relu"), layers.Dense(embed_dim),]
+            [layers.Dense(dense_dim, activation = "relu"), layers.Dense(embed_dim), ]
         )
         self.layernorm_1 = layers.LayerNormalization()
         self.layernorm_2 = layers.LayerNormalization()
@@ -298,12 +299,13 @@ class TransformerEncoderReadout(layers.Layer):
 
     def call(self, inputs):
         x = self.partition_padding(inputs)
-        padding_mask = tf.reduce_any(tf.not_equal(x, 0.0), axis=-1)
+        padding_mask = tf.reduce_any(tf.not_equal(x, 0.0), axis = -1)
         padding_mask = padding_mask[:, tf.newaxis, tf.newaxis, :]
-        attention_output = self.attention(x, x, attention_mask=padding_mask)
+        attention_output = self.attention(x, x, attention_mask = padding_mask)
         proj_input = self.layernorm_1(x + attention_output)
         proj_output = self.layernorm_2(proj_input + self.dense_proj(proj_input))
         return self.average_pooling(proj_output)
+
 
 def MPNNModel(
         atom_dim,
@@ -314,11 +316,10 @@ def MPNNModel(
         num_attention_heads=8,
         dense_units=512,
 ):
-
-    atom_features = layers.Input((atom_dim), dtype="float32", name="atom_features")
-    bond_features = layers.Input((bond_dim), dtype="float32", name="bond_features")
-    pair_indices = layers.Input((2), dtype="int32", name="pair_indices")
-    molecule_indicator = layers.Input((), dtype="int32", name="molecule_indicator")
+    atom_features = layers.Input((atom_dim), dtype = "float32", name = "atom_features")
+    bond_features = layers.Input((bond_dim), dtype = "float32", name = "bond_features")
+    pair_indices = layers.Input((2), dtype = "int32", name = "pair_indices")
+    molecule_indicator = layers.Input((), dtype = "int32", name = "molecule_indicator")
 
     x = MessagePassing(message_units, message_steps)(
         [atom_features, bond_features, pair_indices]
@@ -328,28 +329,29 @@ def MPNNModel(
         num_attention_heads, message_units, dense_units, batch_size
     )([x, molecule_indicator])
 
-    x = layers.Dense(dense_units, activation="relu")(x)
-    x = layers.Dense(1, activation="sigmoid")(x)
+    x = layers.Dense(dense_units, activation = "relu")(x)
+    x = layers.Dense(1, activation = "sigmoid")(x)
 
     model = keras.Model(
-        inputs=[atom_features, bond_features, pair_indices, molecule_indicator],
-        outputs=[x],
+        inputs = [atom_features, bond_features, pair_indices, molecule_indicator],
+        outputs = [x],
     )
     return model
-#%%
 
-raw = pd.read_csv('dataset/GDSC_drug_name_SMILES_and_ECFP4_v2.txt', sep='\t')
+
+# %%
+
+raw = pd.read_csv('dataset/GDSC_drug_name_SMILES_and_ECFP4_v2.txt', sep = '\t')
 
 smiles_dump = raw.iloc[0][1]
 # smiles_dump = 'CC(=O)Oc1ccccc1C(O)=O'
 smiles_dump_y = 1.29
 # graphs_from_smiles(smiles_dump)
-#%%
+# %%
 molecule = molecule_from_smiles(smiles_dump)
 print(smiles_dump)
-molecule
 
-#%%
+# %%
 
 graph = graph_from_molecule(molecule)
 print("Graph (including self-loops):")
@@ -359,13 +361,12 @@ print("\tpair indices\t", graph[2].shape)
 
 graph
 
-#%%
+# %%
 
 x_train = graphs_from_smiles(smiles_dump)
 y_train = smiles_dump_y
-#%%
+# %%
 
 train_dataset = MPNNDataset(x_train, y_train)
 
-
-#%%
+# %%
