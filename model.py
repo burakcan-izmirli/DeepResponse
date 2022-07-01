@@ -11,11 +11,29 @@ import numpy as np  # 1.19.5
 # from rdkit import RDLogger
 # from rdkit.Chem.Draw import IPythonConsole
 # from rdkit.Chem.Draw import MolsToGridImage
+import matplotlib.pyplot as plt
+import warnings
+warnings.filterwarnings('ignore')
 
 from mpnn import *
 #%%
 dataset_raw = pd.read_csv("burakcan_dataset.csv")
-dataset_raw = dataset_raw.iloc[0:50]
+
+plt.hist(dataset_raw.pic50, bins =50)
+plt.show()
+
+dataset_raw = dataset_raw.iloc[0:1000]
+
+
+# print(dataset_raw.iloc[0:10,].smiles)
+
+
+# csv_path = keras.utils.get_file(
+#     "BBBP.csv", "https://deepchemdata.s3-us-west-1.amazonaws.com/datasets/BBBP.csv"
+# )
+#
+# dataset_raw2 = pd.read_csv(csv_path, usecols=[1, 2, 3])
+# print(dataset_raw2.iloc[0:10,].smiles)
 #%%
 permuted_indices = np.random.permutation(np.arange(dataset_raw.shape[0]))
 
@@ -75,9 +93,9 @@ mpnn = MPNNModel(
 )
 # %%
 mpnn.compile(
-    loss=keras.losses.BinaryCrossentropy(),
-    optimizer=keras.optimizers.Adam(learning_rate=5e-4),
-    metrics=[keras.metrics.AUC(name="AUC")],
+    loss=keras.losses.MeanSquaredError(),
+    optimizer=keras.optimizers.Adam(learning_rate = 0.1)
+    # metrics=[keras.metrics.AUC(name="AUC")],
 )
 
 keras.utils.plot_model(mpnn, show_dtype=True, show_shapes=True)
@@ -90,8 +108,6 @@ history = mpnn.fit(
     train_dataset,
     validation_data=valid_dataset,
     epochs=5,
-    verbose=1,
-    class_weight={0: 2.0, 1: 0.5},
+    verbose=1
 )
-
 #%%
