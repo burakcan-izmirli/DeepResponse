@@ -13,6 +13,7 @@ import numpy as np  # 1.19.5
 # from rdkit.Chem.Draw import MolsToGridImage
 import matplotlib.pyplot as plt
 import warnings
+import io
 warnings.filterwarnings('ignore')
 
 from mpnn import *
@@ -39,19 +40,22 @@ permuted_indices = np.random.permutation(np.arange(dataset_raw.shape[0]))
 
 # Train set: 80 % of data
 train_index = permuted_indices[: int(dataset_raw.shape[0] * 0.8)]
-x_train = graphs_from_smiles(dataset_raw.iloc[train_index].smiles)
+x_train_mpnn = graphs_from_smiles(dataset_raw.iloc[train_index].smiles)
+x_train_conv = dataset_raw.iloc[train_index].cell_line_features
 y_train = dataset_raw.iloc[train_index].pic50
 
 #%%
 # Valid set: 19 % of data
 valid_index = permuted_indices[int(dataset_raw.shape[0] * 0.8) : int(dataset_raw.shape[0] * 0.99)]
-x_valid = graphs_from_smiles(dataset_raw.iloc[valid_index].smiles)
+x_valid_mpnn = graphs_from_smiles(dataset_raw.iloc[valid_index].smiles)
+x_valid_conv = dataset_raw.iloc[valid_index].cell_line_features
 y_valid = dataset_raw.iloc[valid_index].pic50
 
 #%%
 # Test set: 1 % of data
 test_index = permuted_indices[int(dataset_raw.shape[0] * 0.99) :]
-x_test = graphs_from_smiles(dataset_raw.iloc[test_index].smiles)
+x_test_mpnn = graphs_from_smiles(dataset_raw.iloc[test_index].smiles)
+x_test_conv = dataset_raw.iloc[train_index].cell_line_features
 y_test = dataset_raw.iloc[test_index].pic50
 
 
@@ -87,10 +91,60 @@ def MPNNModel(
         outputs=[x],
     )
     return model
+
 # %%
-mpnn = MPNNModel(
-    atom_dim=x_train[0][0][0].shape[0], bond_dim=x_train[1][0][0].shape[0],
-)
+def mergedModel(
+    atom_dim,
+    bond_dim,
+    batch_size=32,
+    message_units=64,
+    message_steps=4,
+    num_attention_heads=8,
+    dense_units=512,
+):
+
+    atom_features = layers.Input((atom_dim), dtype="float32", name="atom_features")
+    bond_features = layers.Input((bond_dim), dtype="float32", name="bond_features")
+    pair_indices = layers.Input((2), dtype="int32", name="pair_indices")
+    molecule_indicator = layers.Input((), dtype="int32", name="molecule_indicator")
+
+    x = MessagePassing(message_units, message_steps)(
+        [atom_features, bond_features, pair_indices]
+    )
+
+    x = TransformerEncoderReadout(
+        num_attention_heads, message_units, dense_units, batch_size
+    )([x, molecule_indicator])
+
+    # x = layers.Dense(dense_units, activation="relu")(x)
+    # x = layers.Dense(1, activation="sigmoid")(x)
+
+    input_layer = layers.Input(shape=(3, 1), name='input_layer')
+    conv_1 = layers.Conv1D(64, 2, strides=1, padding='same', activation='relu', name='conv_1')(input_layer)
+    conv_2 = layers.Conv1D(64, 1, strides=1, padding='same', activation='relu', name='conv_2')(conv_1)
+    dropout_1 = layers.Dropout(0.5, name= 'dropout_1')(conv_2)
+    pooling_1 = layers.MaxPooling1D(1, name = 'pooling_1')(dropout_1)
+    conv_3 = layers.Conv1D(64, 1, activation='relu', name='conv_3')(pooling_1)
+    pooling_2 = layers.MaxPooling1D(2, name = 'pooling_2')(conv_3)
+    flatten_1 = layers.Flatten()(pooling_2)
+
+    concat = layers.concatenate([flatten_1, x], name='concat')
+
+    dense_1 = layers.Dense(100, activation='relu')(concat)
+    dense_2 = layers.Dense(16501, activation='sigmoid')(dense_1)
+
+    model = keras.Model(
+        inputs=[atom_features, bond_features, pair_indices, molecule_indicator, input_layer],
+        outputs=[dense_2],
+        name = 'final_output'
+    )
+
+    return model
+
+
+# %%
+mpnn = mergedModel(
+    atom_dim=x_train_mpnn[0][0][0].shape[0], bond_dim=x_train_mpnn[1][0][0].shape[0])
 # %%
 mpnn.compile(
     loss=keras.losses.MeanSquaredError(),
@@ -110,4 +164,7 @@ history = mpnn.fit(
     epochs=5,
     verbose=1
 )
+#%%
+dump = pd.read_csv(io.StringIO(x_train_conv[0]), sep="\s\s+")[:-1]
+
 #%%
