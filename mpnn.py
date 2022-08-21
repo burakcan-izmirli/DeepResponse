@@ -4,7 +4,8 @@ import tensorflow as tf  # 2.6.0
 from tensorflow.keras import layers
 from tensorflow import keras
 
-#%%
+
+# %%
 
 class Featurizer:
     def __init__(self, allowable_sets):
@@ -136,6 +137,7 @@ def graphs_from_smiles(smiles_list):
         tf.ragged.constant(pair_indices_list, dtype = tf.int64),
     )
 
+
 # %%
 def prepare_batch(x_batch, y_batch):
     """Merges (sub)graphs of batch into a single global (disconnected) graph
@@ -157,31 +159,75 @@ def prepare_batch(x_batch, y_batch):
     gather_indices = tf.repeat(molecule_indices[:-1], num_bonds[1:])
     increment = tf.cumsum(num_atoms[:-1])
     increment = tf.pad(tf.gather(increment, gather_indices), [(num_bonds[0], 0)])
-    pair_indices = pair_indices.merge_dims(outer_axis=0, inner_axis=1).to_tensor()
+    pair_indices = pair_indices.merge_dims(outer_axis = 0, inner_axis = 1).to_tensor()
     pair_indices = pair_indices + increment[:, tf.newaxis]
-    atom_features = atom_features.merge_dims(outer_axis=0, inner_axis=1).to_tensor()
-    bond_features = bond_features.merge_dims(outer_axis=0, inner_axis=1).to_tensor()
+    atom_features = atom_features.merge_dims(outer_axis = 0, inner_axis = 1).to_tensor()
+    bond_features = bond_features.merge_dims(outer_axis = 0, inner_axis = 1).to_tensor()
 
     return (atom_features, bond_features, pair_indices, molecule_indicator), y_batch
 
 
-def MPNNDataset(X, y, batch_size=32, shuffle=False):
+# %%
+def prepare_batch_new(x_batch_conv, x_batch_mpnn, y_batch):
+    """Merges (sub)graphs of batch into a single global (disconnected) graph
+    """
+
+    atom_features, bond_features, pair_indices = x_batch_mpnn
+
+    # Obtain number of atoms and bonds for each graph (molecule)
+    num_atoms = atom_features.row_lengths()
+    num_bonds = bond_features.row_lengths()
+
+    # Obtain partition indices (molecule_indicator), which will be used to
+    # gather (sub)graphs from global graph in model later on
+    molecule_indices = tf.range(len(num_atoms))
+    molecule_indicator = tf.repeat(molecule_indices, num_atoms)
+
+    # Merge (sub)graphs into a global (disconnected) graph. Adding 'increment' to
+    # 'pair_indices' (and merging ragged tensors) actualizes the global graph
+    gather_indices = tf.repeat(molecule_indices[:-1], num_bonds[1:])
+    increment = tf.cumsum(num_atoms[:-1])
+    increment = tf.pad(tf.gather(increment, gather_indices), [(num_bonds[0], 0)])
+    pair_indices = pair_indices.merge_dims(outer_axis = 0, inner_axis = 1).to_tensor()
+    pair_indices = pair_indices + increment[:, tf.newaxis]
+    atom_features = atom_features.merge_dims(outer_axis = 0, inner_axis = 1).to_tensor()
+    bond_features = bond_features.merge_dims(outer_axis = 0, inner_axis = 1).to_tensor()
+
+    return (x_batch_conv, atom_features, bond_features, pair_indices, molecule_indicator), y_batch
+
+
+def mpnn_dataset(X, y, batch_size=32, shuffle=False):
     dataset = tf.data.Dataset.from_tensor_slices((X, (y)))
     if shuffle:
         dataset = dataset.shuffle(1024)
     return dataset.batch(batch_size).map(prepare_batch, -1).prefetch(-1)
+
+
+def dataset_new(x_conv, x_mpnn, y, batch_size=32, shuffle=False):
+    dataset = tf.data.Dataset.from_tensor_slices((x_conv, x_mpnn, (y)))
+    if shuffle:
+        dataset = dataset.shuffle(1024)
+    return dataset.batch(batch_size).map(prepare_batch_new, -1).prefetch(-1)
+
+
+def conv_dataset(X, y, batch_size=32, shuffle=False):
+    dataset = tf.data.Dataset.from_tensor_slices((X, (y)))
+    if shuffle:
+        dataset = dataset.shuffle(1024)
+    return dataset.batch(batch_size).prefetch(-1)
+
 
 class EdgeNetwork(layers.Layer):
     def build(self, input_shape):
         self.atom_dim = input_shape[0][-1]
         self.bond_dim = input_shape[1][-1]
         self.kernel = self.add_weight(
-            shape=(self.bond_dim, self.atom_dim * self.atom_dim),
-            initializer="glorot_uniform",
-            name="kernel",
+            shape = (self.bond_dim, self.atom_dim * self.atom_dim),
+            initializer = "glorot_uniform",
+            name = "kernel",
         )
         self.bias = self.add_weight(
-            shape=(self.atom_dim * self.atom_dim), initializer="zeros", name="bias",
+            shape = (self.atom_dim * self.atom_dim), initializer = "zeros", name = "bias",
         )
         self.built = True
 
@@ -196,17 +242,19 @@ class EdgeNetwork(layers.Layer):
 
         # Obtain atom features of neighbors
         atom_features_neighbors = tf.gather(atom_features, pair_indices[:, 1])
-        atom_features_neighbors = tf.expand_dims(atom_features_neighbors, axis=-1)
+        atom_features_neighbors = tf.expand_dims(atom_features_neighbors, axis = -1)
 
         # Apply neighborhood aggregation
         transformed_features = tf.matmul(bond_features, atom_features_neighbors)
-        transformed_features = tf.squeeze(transformed_features, axis=-1)
+        transformed_features = tf.squeeze(transformed_features, axis = -1)
         aggregated_features = tf.math.unsorted_segment_sum(
             transformed_features,
             pair_indices[:, 0],
-            num_segments=tf.shape(atom_features)[0],
+            num_segments = tf.shape(atom_features)[0],
         )
         return aggregated_features
+
+
 # %%
 
 class MessagePassing(layers.Layer):
@@ -241,6 +289,8 @@ class MessagePassing(layers.Layer):
                 atom_features_aggregated, atom_features_updated
             )
         return atom_features_updated
+
+
 # %%
 
 class PartitionPadding(layers.Layer):
@@ -249,7 +299,6 @@ class PartitionPadding(layers.Layer):
         self.batch_size = batch_size
 
     def call(self, inputs):
-
         atom_features, molecule_indicator = inputs
 
         # Obtain subgraphs
@@ -265,25 +314,25 @@ class PartitionPadding(layers.Layer):
                 tf.pad(f, [(0, max_num_atoms - n), (0, 0)])
                 for f, n in zip(atom_features_partitioned, num_atoms)
             ],
-            axis=0,
+            axis = 0,
         )
 
         # Remove empty subgraphs (usually for last batch in dataset)
         gather_indices = tf.where(tf.reduce_sum(atom_features_stacked, (1, 2)) != 0)
-        gather_indices = tf.squeeze(gather_indices, axis=-1)
-        return tf.gather(atom_features_stacked, gather_indices, axis=0)
+        gather_indices = tf.squeeze(gather_indices, axis = -1)
+        return tf.gather(atom_features_stacked, gather_indices, axis = 0)
 
 
 class TransformerEncoderReadout(layers.Layer):
     def __init__(
-        self, num_heads=8, embed_dim=64, dense_dim=512, batch_size=32, **kwargs
+            self, num_heads=8, embed_dim=64, dense_dim=512, batch_size=32, **kwargs
     ):
         super().__init__(**kwargs)
 
         self.partition_padding = PartitionPadding(batch_size)
         self.attention = layers.MultiHeadAttention(num_heads, embed_dim)
         self.dense_proj = keras.Sequential(
-            [layers.Dense(dense_dim, activation="relu"), layers.Dense(embed_dim),]
+            [layers.Dense(dense_dim, activation = "relu"), layers.Dense(embed_dim), ]
         )
         self.layernorm_1 = layers.LayerNormalization()
         self.layernorm_2 = layers.LayerNormalization()
@@ -291,14 +340,16 @@ class TransformerEncoderReadout(layers.Layer):
 
     def call(self, inputs):
         x = self.partition_padding(inputs)
-        padding_mask = tf.reduce_any(tf.not_equal(x, 0.0), axis=-1)
+        padding_mask = tf.reduce_any(tf.not_equal(x, 0.0), axis = -1)
         padding_mask = padding_mask[:, tf.newaxis, tf.newaxis, :]
-        attention_output = self.attention(x, x, attention_mask=padding_mask)
+        attention_output = self.attention(x, x, attention_mask = padding_mask)
         proj_input = self.layernorm_1(x + attention_output)
         proj_output = self.layernorm_2(proj_input + self.dense_proj(proj_input))
         return self.average_pooling(proj_output)
-#%%
+# %%
 
-#%%
+# %%
+
+# %%
 
 #%%
