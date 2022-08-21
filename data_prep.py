@@ -19,6 +19,7 @@ cell_lines_list = []
 for i in tqdm(filenames):
     name = i.split("_")[0]
     cell_line_features_raw = pd.read_csv("dataset/full/"+i, sep='\t')
+    cell_line_features_raw.drop(columns=['gene_name'], inplace=True)
     cell_lines_list.append({'cell_line_name': name,
                             'cell_line_features': cell_line_features_raw})
 
@@ -31,7 +32,7 @@ last_table = last_table_raw.drop("ecfp4", axis = 1)
 last_table = last_table.dropna()
 
 #%%
-last_table.to_pickle('burakcan_dataset.pkl')
+last_table.to_pickle('burakcan_dataset_v2.pkl')
 #%%
 
 dump = pd.read_pickle('burakcan_dataset.pkl')
