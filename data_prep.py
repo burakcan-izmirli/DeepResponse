@@ -32,8 +32,8 @@ last_table = last_table_raw.drop("ecfp4", axis = 1)
 last_table = last_table.dropna()
 
 #%%
-last_table.to_pickle('burakcan_dataset_v2.pkl')
+last_table.to_pickle('burakcan_dataset.pkl')
 #%%
 
-dump = pd.read_pickle('burakcan_dataset.pkl')
+dump = pd.read_pickle('burakcan_dataset_old.pkl')
 #%%
