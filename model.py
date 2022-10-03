@@ -1,73 +1,29 @@
-import pandas as pd  # 1.3.4
-# import tensorflow as tf  # 2.6.0
-# import numpy as np  # 1.19.5
-import matplotlib.pyplot as plt
-import warnings
 from mpnn import *
 
-warnings.filterwarnings('ignore')
+# %%
+random_state = 12
+x_train, x_test, y_train, y_test = train_test_split(dataset[['drug_name', 'cell_line_name']], dataset[['pic50']],
+                                                    test_size = 0.01, random_state = random_state)
+
+x_train, x_val, y_train, y_val = train_test_split(x_train, y_train, test_size = 0.19, random_state = random_state)
 
 # %%
-dataset_raw = pd.read_pickle("burakcan_dataset.pkl")
-
-dataset_raw = dataset_raw.sample(frac=1).reset_index(drop=True)
-
-plt.hist(dataset_raw.pic50, bins = 50)
-plt.show()
-
-dataset_raw = dataset_raw.iloc[0:5000]
-
-# %%
-permuted_indices = np.random.permutation(np.arange(dataset_raw.shape[0]))
-
-# Train set: 80 % of data
-train_index = permuted_indices[: int(dataset_raw.shape[0] * 0.8)]
-x_train_mpnn = graphs_from_smiles(dataset_raw.iloc[train_index].smiles)
-x_train_conv = dataset_raw.iloc[train_index].cell_line_features
-y_train = dataset_raw.iloc[train_index].pic50
-
-# %%
-# Valid set: 19 % of data
-valid_index = permuted_indices[int(dataset_raw.shape[0] * 0.8): int(dataset_raw.shape[0] * 0.99)]
-x_valid_mpnn = graphs_from_smiles(dataset_raw.iloc[valid_index].smiles)
-x_valid_conv = dataset_raw.iloc[valid_index].cell_line_features
-y_valid = dataset_raw.iloc[valid_index].pic50
-
-# %%
-# Test set: 1 % of data
-test_index = permuted_indices[int(dataset_raw.shape[0] * 0.99):]
-x_test_mpnn = graphs_from_smiles(dataset_raw.iloc[test_index].smiles)
-x_test_conv = dataset_raw.iloc[train_index].cell_line_features
-y_test = dataset_raw.iloc[test_index].pic50
-
-
-# %%
-def convert_conv_dataset(dataset):
-    last_list = []
-    for i in dataset:
-        dump_list = i.to_numpy()
-        last_list.append(dump_list)
-
-    return np.array(last_list)
-
-
-x_train_conv = convert_conv_dataset(x_train_conv)
-x_valid_conv = convert_conv_dataset(x_valid_conv)
-x_test_conv = convert_conv_dataset(x_test_conv)
+atom_dim, bond_dim, train_dataset = dataset_creator(x_train, y_train, batch_size = 32)
+atom_dim, bond_dim, valid_dataset = dataset_creator(x_val, y_val, batch_size = 32)
 
 
 # %%
 def merged_model(
-        atom_dim,
-        bond_dim,
+        atom_dims,
+        bond_dims,
         batch_size=32,
         message_units=64,
         message_steps=4,
         num_attention_heads=8,
         dense_units=512,
 ):
-    atom_features = layers.Input((atom_dim), dtype = "float32", name = "atom_features")
-    bond_features = layers.Input((bond_dim), dtype = "float32", name = "bond_features")
+    atom_features = layers.Input((atom_dims), dtype = "float32", name = "atom_features")
+    bond_features = layers.Input((bond_dims), dtype = "float32", name = "bond_features")
     pair_indices = layers.Input((2), dtype = "int32", name = "pair_indices")
     molecule_indicator = layers.Input((), dtype = "int32", name = "molecule_indicator")
 
@@ -100,39 +56,35 @@ def merged_model(
     dense_2 = layers.Dense(128, activation = 'relu')(dense_1)
     dense_3 = layers.Dense(1, activation = 'linear')(dense_2)
 
+    model_func = keras.Model(inputs = [input_layer, atom_features, bond_features, pair_indices, molecule_indicator],
+                             outputs = [dense_3],
+                             name = 'final_output')
 
-    model = keras.Model(
-        inputs = [input_layer, atom_features, bond_features, pair_indices, molecule_indicator],
-        outputs = [dense_3],
-        name = 'final_output'
-    )
-
-    return model
+    return model_func
 
 
 # %%
 model = merged_model(
-    atom_dim = x_train_mpnn[0][0][0].shape[0],
-    bond_dim = x_train_mpnn[1][0][0].shape[0])
+    atom_dims = atom_dim,
+    bond_dims = bond_dim)
 
 # %%
 model.compile(
     loss = keras.losses.MeanSquaredError(),
-    optimizer = keras.optimizers.Adam(learning_rate=0.01)
+    optimizer = keras.optimizers.Adam(learning_rate = 0.01)
     # metrics=[keras.metrics.AUC(name="AUC")],
 )
 
-keras.utils.plot_model(model, show_dtype = True, show_shapes = True)
+# keras.utils.plot_model(model, show_dtype = True, show_shapes = True)
+
 
 # %%
-train_dataset = dataset_new(x_train_conv, x_train_mpnn, y_train, batch_size = 32)
-valid_dataset = dataset_new(x_valid_conv, x_valid_mpnn, y_valid, batch_size = 32)
+csv_logger = keras.callbacks.CSVLogger('log.csv', append = True, separator = ';')
 
-# %%
 history = model.fit(
     train_dataset,
     validation_data = valid_dataset,
-    epochs = 10,
-    verbose = 1
+    epochs = 50,
+    verbose = 1,
+    callbacks = [csv_logger]
 )
-

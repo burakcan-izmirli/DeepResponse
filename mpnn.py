@@ -3,6 +3,21 @@ import numpy as np  # 1.19.5
 import tensorflow as tf  # 2.6.0
 from tensorflow.keras import layers
 from tensorflow import keras
+import pandas as pd
+from tqdm import tqdm
+import warnings
+from sklearn.model_selection import train_test_split
+
+tf.config.run_functions_eagerly(True)
+
+warnings.filterwarnings('ignore')
+
+# %%
+dataset_raw = pd.read_pickle("burakcan_dataset.pkl")
+dataset_raw = dataset_raw.sample(frac = 1).reset_index(drop = True)
+dataset = dataset_raw[['drug_name', 'cell_line_name', 'pic50']]
+mpnn = dataset_raw[['drug_name', 'smiles']].drop_duplicates()
+conv = dataset_raw[['cell_line_name', 'cell_line_features']].drop_duplicates(subset = 'cell_line_name')
 
 
 # %%
@@ -122,7 +137,7 @@ def graphs_from_smiles(smiles_list):
     bond_features_list = []
     pair_indices_list = []
 
-    for smiles in smiles_list:
+    for smiles in tqdm(smiles_list):
         molecule = molecule_from_smiles(smiles)
         atom_features, bond_features, pair_indices = graph_from_molecule(molecule)
 
@@ -139,36 +154,18 @@ def graphs_from_smiles(smiles_list):
 
 
 # %%
-def prepare_batch(x_batch, y_batch):
-    """Merges (sub)graphs of batch into a single global (disconnected) graph
-    """
+def convert_conv_dataset(data):
+    last_list = []
+    for i in data:
+        dump_list = i.to_numpy()
+        last_list.append(dump_list)
 
-    atom_features, bond_features, pair_indices = x_batch
-
-    # Obtain number of atoms and bonds for each graph (molecule)
-    num_atoms = atom_features.row_lengths()
-    num_bonds = bond_features.row_lengths()
-
-    # Obtain partition indices (molecule_indicator), which will be used to
-    # gather (sub)graphs from global graph in model later on
-    molecule_indices = tf.range(len(num_atoms))
-    molecule_indicator = tf.repeat(molecule_indices, num_atoms)
-
-    # Merge (sub)graphs into a global (disconnected) graph. Adding 'increment' to
-    # 'pair_indices' (and merging ragged tensors) actualizes the global graph
-    gather_indices = tf.repeat(molecule_indices[:-1], num_bonds[1:])
-    increment = tf.cumsum(num_atoms[:-1])
-    increment = tf.pad(tf.gather(increment, gather_indices), [(num_bonds[0], 0)])
-    pair_indices = pair_indices.merge_dims(outer_axis = 0, inner_axis = 1).to_tensor()
-    pair_indices = pair_indices + increment[:, tf.newaxis]
-    atom_features = atom_features.merge_dims(outer_axis = 0, inner_axis = 1).to_tensor()
-    bond_features = bond_features.merge_dims(outer_axis = 0, inner_axis = 1).to_tensor()
-
-    return (atom_features, bond_features, pair_indices, molecule_indicator), y_batch
+    return np.array(last_list)
 
 
 # %%
-def prepare_batch_new(x_batch_conv, x_batch_mpnn, y_batch):
+
+def prepare_batch(x_batch_conv, x_batch_mpnn, y_batch):
     """Merges (sub)graphs of batch into a single global (disconnected) graph
     """
 
@@ -196,25 +193,21 @@ def prepare_batch_new(x_batch_conv, x_batch_mpnn, y_batch):
     return (x_batch_conv, atom_features, bond_features, pair_indices, molecule_indicator), y_batch
 
 
-def mpnn_dataset(X, y, batch_size=32, shuffle=False):
-    dataset = tf.data.Dataset.from_tensor_slices((X, (y)))
+def dataset_creator(x, y, batch_size=32, shuffle=False):
+    tf_dataset = tf.data.Dataset.from_tensor_slices((x, (y)))
     if shuffle:
-        dataset = dataset.shuffle(1024)
-    return dataset.batch(batch_size).map(prepare_batch, -1).prefetch(-1)
-
-
-def dataset_new(x_conv, x_mpnn, y, batch_size=32, shuffle=False):
-    dataset = tf.data.Dataset.from_tensor_slices((x_conv, x_mpnn, (y)))
-    if shuffle:
-        dataset = dataset.shuffle(1024)
-    return dataset.batch(batch_size).map(prepare_batch_new, -1).prefetch(-1)
-
-
-def conv_dataset(X, y, batch_size=32, shuffle=False):
-    dataset = tf.data.Dataset.from_tensor_slices((X, (y)))
-    if shuffle:
-        dataset = dataset.shuffle(1024)
-    return dataset.batch(batch_size).prefetch(-1)
+        tf_dataset = tf_dataset.shuffle(1024)
+    batched_dataset = tf_dataset.batch(batch_size)
+    for i in batched_dataset.as_numpy_iterator():
+        x_data, y_data = i
+    x_data = pd.DataFrame(x_data.astype('str'), columns = ['drug_name', 'cell_line_name'])
+    x_data = x_data.merge(mpnn).merge(conv)
+    x_mpnn = graphs_from_smiles(x_data.smiles)
+    x_conv = convert_conv_dataset(x_data.cell_line_features)
+    atom_dim = x_mpnn[0][0][0].shape[0]
+    bond_dim = x_mpnn[1][0][0].shape[0]
+    batched_dataset = tf.data.Dataset.from_tensor_slices((x_conv, x_mpnn, (y_data))).batch(1)
+    return atom_dim, bond_dim, batched_dataset.map(prepare_batch, -1).prefetch(-1)
 
 
 class EdgeNetwork(layers.Layer):
@@ -346,10 +339,3 @@ class TransformerEncoderReadout(layers.Layer):
         proj_input = self.layernorm_1(x + attention_output)
         proj_output = self.layernorm_2(proj_input + self.dense_proj(proj_input))
         return self.average_pooling(proj_output)
-# %%
-
-# %%
-
-# %%
-
-#%%
