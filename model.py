@@ -1,15 +1,27 @@
 from mpnn import *
 
 # %%
-random_state = 12
+parser = ArgumentParser(formatter_class = ArgumentDefaultsHelpFormatter)
+parser.add_argument("-s", "--seed", default = 12, type = int, help = "Seed")
+parser.add_argument("-b", "--batch_size", default = 64, type = int, help = "Seed")
+parser.add_argument("-e", "--epoch", default = "50", type = int, help = "Epoch size")
+parser.add_argument("-l", "--learning_rate", default = 0.01, type = float, help = "Learning rate")
+args = vars(parser.parse_args())
+
+random_state = args["seed"]
+batch_size = args["batch_size"]
+learning_rate = args["learning_rate"]
+epoch = args["epoch"]
+
+# %%
 x_train, x_test, y_train, y_test = train_test_split(dataset[['drug_name', 'cell_line_name']], dataset[['pic50']],
                                                     test_size = 0.01, random_state = random_state)
 
 x_train, x_val, y_train, y_val = train_test_split(x_train, y_train, test_size = 0.19, random_state = random_state)
 
 # %%
-atom_dim, bond_dim, train_dataset = dataset_creator(x_train, y_train, batch_size = 32)
-atom_dim, bond_dim, valid_dataset = dataset_creator(x_val, y_val, batch_size = 32)
+atom_dim, bond_dim, train_dataset = dataset_creator(x_train, y_train, batch_size)
+atom_dim, bond_dim, valid_dataset = dataset_creator(x_val, y_val, batch_size)
 
 
 # %%
@@ -71,7 +83,7 @@ model = merged_model(
 # %%
 model.compile(
     loss = keras.losses.MeanSquaredError(),
-    optimizer = keras.optimizers.Adam(learning_rate = 0.01)
+    optimizer = keras.optimizers.Adam(learning_rate = learning_rate)
     # metrics=[keras.metrics.AUC(name="AUC")],
 )
 
@@ -84,7 +96,7 @@ csv_logger = keras.callbacks.CSVLogger('log.csv', append = True, separator = ';'
 history = model.fit(
     train_dataset,
     validation_data = valid_dataset,
-    epochs = 50,
+    epochs = epoch,
     verbose = 1,
     callbacks = [csv_logger]
 )
