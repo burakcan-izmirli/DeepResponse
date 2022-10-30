@@ -7,6 +7,7 @@ from tensorflow import keras
 import pandas as pd
 from tqdm import tqdm
 import warnings
+from dotenv import load_dotenv
 import os
 from sklearn.model_selection import train_test_split
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
