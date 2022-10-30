@@ -1,5 +1,12 @@
 from mpnn import *
-
+# %%
+load_dotenv('dev.env')
+experiment = Experiment(
+    api_key=os.environ.get("api_key"),
+    project_name="general",
+    workspace="burakcan-izmirli",
+    log_code = True
+)
 # %%
 parser = ArgumentParser(formatter_class = ArgumentDefaultsHelpFormatter)
 parser.add_argument("-s", "--seed", default = 12, type = int, help = "Seed")
@@ -14,6 +21,11 @@ learning_rate = args["learning_rate"]
 epoch = args["epoch"]
 
 # %%
+# random_state = 12
+# batch_size = 64
+# learning_rate = 0.01
+# epoch = 10
+# %%
 x_train, x_test, y_train, y_test = train_test_split(dataset[['drug_name', 'cell_line_name']], dataset[['pic50']],
                                                     test_size = 0.01, random_state = random_state)
 
@@ -22,6 +34,7 @@ x_train, x_val, y_train, y_val = train_test_split(x_train, y_train, test_size = 
 # %%
 atom_dim, bond_dim, train_dataset = dataset_creator(x_train, y_train, batch_size)
 atom_dim, bond_dim, valid_dataset = dataset_creator(x_val, y_val, batch_size)
+atom_dim, bond_dim, test_dataset = dataset_creator(x_test, y_test, len(x_test))
 
 
 # %%
@@ -75,8 +88,10 @@ def merged_model(
     return model_func
 
 
+
 # %%
 model = merged_model(
+    batch_size = batch_size,
     atom_dims = atom_dim,
     bond_dims = bond_dim)
 
@@ -89,7 +104,7 @@ model.compile(
 
 # keras.utils.plot_model(model, show_dtype = True, show_shapes = True)
 
-
+print(model.summary())
 # %%
 csv_logger = keras.callbacks.CSVLogger('log.csv', append = True, separator = ';')
 
@@ -100,3 +115,7 @@ history = model.fit(
     verbose = 1,
     callbacks = [csv_logger]
 )
+# %%
+predictions = model.predict(test_dataset, verbose = 1)
+mse = mean_squared_error(y_test, predictions)
+print(mse)

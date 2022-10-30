@@ -1,4 +1,5 @@
 from rdkit import Chem  # 2022.03.2
+from comet_ml import Experiment
 import numpy as np  # 1.19.5
 import tensorflow as tf  # 2.6.0
 from tensorflow.keras import layers
@@ -6,8 +7,10 @@ from tensorflow import keras
 import pandas as pd
 from tqdm import tqdm
 import warnings
+import os
 from sklearn.model_selection import train_test_split
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+from sklearn.metrics import mean_squared_error
 
 tf.config.run_functions_eagerly(True)
 
