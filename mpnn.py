@@ -17,13 +17,6 @@ tf.config.run_functions_eagerly(True)
 
 warnings.filterwarnings('ignore')
 
-# %%
-dataset_raw = pd.read_pickle("burakcan_dataset.pkl")
-dataset_raw = dataset_raw.sample(frac = 1).reset_index(drop = True)
-dataset = dataset_raw[['drug_name', 'cell_line_name', 'pic50']]
-mpnn = dataset_raw[['drug_name', 'smiles']].drop_duplicates()
-conv = dataset_raw[['cell_line_name', 'cell_line_features']].drop_duplicates(subset = 'cell_line_name')
-
 
 # %%
 
@@ -198,7 +191,7 @@ def prepare_batch(x_batch_conv, x_batch_mpnn, y_batch):
     return (x_batch_conv, atom_features, bond_features, pair_indices, molecule_indicator), y_batch
 
 
-def dataset_creator(x, y, batch_size=32, shuffle=False):
+def dataset_creator(x, y, batch_size, mpnn, conv, shuffle=False):
     tf_dataset = tf.data.Dataset.from_tensor_slices((x, (y)))
     if shuffle:
         tf_dataset = tf_dataset.shuffle(1024)
