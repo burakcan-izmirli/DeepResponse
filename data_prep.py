@@ -62,7 +62,7 @@ last_table_raw_l1000 = pd.merge(first_table, cell_line_features_l1000, how = 'ou
 last_table_l1000 = last_table_raw_l1000.drop("ecfp4", axis = 1)
 
 last_table_raw_pathway_sorted = pd.merge(first_table, cell_line_features_pathway_sorted, how = 'outer')
-last_table_pathway_sorted = last_table_raw_l1000.drop("ecfp4", axis = 1)
+last_table_pathway_sorted = last_table_raw_pathway_sorted.drop("ecfp4", axis = 1)
 # %%
 last_table = last_table.dropna()
 last_table_l1000 = last_table_l1000.dropna()
@@ -73,3 +73,5 @@ last_table_pathway_sorted = last_table_pathway_sorted.dropna()
 last_table.to_pickle('burakcan_dataset.pkl')
 last_table_l1000.to_pickle('burakcan_dataset_l1000.pkl')
 last_table_pathway_sorted.to_pickle('burakcan_dataset_pathway_sorted.pkl')
+
+#%%
