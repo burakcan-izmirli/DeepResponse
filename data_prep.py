@@ -41,18 +41,35 @@ for i in tqdm(filenames):
 
 cell_line_features_l1000 = pd.DataFrame(cell_lines_list)
 # %%
+# Pathway Sorted
+filenames = next(walk("dataset/sorted_genes_pathway_basis_16179_vector/GDSC_cell_lines_16179_genes_4_col_pathway_based/"), (None, None, []))[2]
+cell_lines_list = []
+for i in tqdm(filenames):
+    name = i.split("_")[0]
+    cell_line_features_raw = pd.read_csv("dataset/sorted_genes_pathway_basis_16179_vector"
+                                         "/GDSC_cell_lines_16179_genes_4_col_pathway_based/" + i, sep = '\t')
+    cell_line_features_raw.columns = ['Exp', 'Mut', 'Met', 'Cnv']
+    cell_lines_list.append({'cell_line_name': name,
+                            'cell_line_features': cell_line_features_raw})
+
+cell_line_features_pathway_sorted = pd.DataFrame(cell_lines_list)
+
+# %%
 last_table_raw = pd.merge(first_table, cell_line_features, how = 'outer')
 last_table = last_table_raw.drop("ecfp4", axis = 1)
 
 last_table_raw_l1000 = pd.merge(first_table, cell_line_features_l1000, how = 'outer')
 last_table_l1000 = last_table_raw_l1000.drop("ecfp4", axis = 1)
 
+last_table_raw_pathway_sorted = pd.merge(first_table, cell_line_features_pathway_sorted, how = 'outer')
+last_table_pathway_sorted = last_table_raw_l1000.drop("ecfp4", axis = 1)
 # %%
 last_table = last_table.dropna()
 last_table_l1000 = last_table_l1000.dropna()
+last_table_pathway_sorted = last_table_pathway_sorted.dropna()
+
 
 # %%
 last_table.to_pickle('burakcan_dataset.pkl')
-last_table.to_pickle('burakcan_dataset_l1000.pkl')
-
-#%%
+last_table_l1000.to_pickle('burakcan_dataset_l1000.pkl')
+last_table_pathway_sorted.to_pickle('burakcan_dataset_pathway_sorted.pkl')
