@@ -71,12 +71,16 @@ cell_lines_list = []
 for i in tqdm(filenames):
     name = i.split("_")[0]
     cell_line_features_raw = pd.read_csv("dataset/full/" + i, sep = '\t')
-    cell_line_features_raw = cell_line_features_raw.set_index('gene_name')
-    cell_line_features_raw = cell_line_features_raw.reindex(index=pathway_gene_merged['gene_name'])
-    cell_line_features_raw.reset_index(inplace = True)
-    cell_line_features_raw.drop(columns = ['gene_name'], inplace = True)
+    cell_line_features_df = cell_line_features_raw.set_index('gene_name')
+    cell_line_features_df = cell_line_features_df.reindex(index=pathway_gene_merged['gene_name'])
+    cell_line_features_df.reset_index(inplace = True)
+    cell_line_features_df.dropna(inplace = True)
+    gene_list = cell_line_features_df['gene_name'].to_list()
+    genes_without_pathway = cell_line_features_raw.query('gene_name not in @gene_list')
+    cell_line_features_df = pd.concat([cell_line_features_df, genes_without_pathway])
+    cell_line_features_df.drop(columns = ['gene_name'], inplace = True)
     cell_lines_list.append({'cell_line_name': name,
-                            'cell_line_features': cell_line_features_raw})
+                            'cell_line_features': cell_line_features_df})
 
 cell_line_features_pathway_sorted = pd.DataFrame(cell_lines_list)
 
