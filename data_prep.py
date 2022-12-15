@@ -103,3 +103,18 @@ last_table_pathway_sorted = last_table_pathway_sorted.dropna()
 last_table.to_pickle('burakcan_dataset.pkl')
 last_table_l1000.to_pickle('burakcan_dataset_l1000.pkl')
 last_table_pathway_sorted.to_pickle('burakcan_dataset_pathway_sorted.pkl')
+
+# %%
+
+cell_line_tissue_paired = pd.read_csv('dataset/GDSC_986_cell_lines_matched_with_TCGA_tissue_names.txt', sep = '\t')
+
+cell_line_tissue_paired_filtered = cell_line_tissue_paired.query("Tissue_name == 'digestive_system'")
+
+digestive_list = cell_line_tissue_paired_filtered['Name'].to_list()
+
+raw_data = pd.read_pickle("burakcan_dataset.pkl")
+
+digestive_system = raw_data.query('cell_line_name in @digestive_list')
+
+digestive_system.to_pickle('digestive_system.pkl')
+#%%
