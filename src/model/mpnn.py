@@ -1,3 +1,9 @@
+"""
+Message passing neural networks
+This code was implemented based on Keras's Message-passing neural network (MPNN)
+for molecular property prediction tutorial.
+
+"""
 from rdkit import Chem
 import numpy as np
 import tensorflow as tf
