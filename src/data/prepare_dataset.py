@@ -93,12 +93,10 @@ def tf_dataset_creator(x, y, batch_size, mpnn, conv):
     x_data = x_data.merge(mpnn).merge(conv)
     x_mpnn = graphs_from_smiles(x_data.smiles)
     x_conv = convert_conv_dataset(x_data.cell_line_features)
-
-    atom_dim = x_mpnn[0][0][0].shape[0]
-    bond_dim = x_mpnn[1][0][0].shape[0]
     batched_dataset = tf.data.Dataset.from_tensor_slices((x_conv, x_mpnn, (y_data))).batch(1)
 
-    return atom_dim, bond_dim, batched_dataset.map(prepare_batch, -1).prefetch(-1)
+    return x_mpnn[0][0][0].shape[0], x_mpnn[1][0][0].shape[0], x_conv.shape, \
+        batched_dataset.map(prepare_batch, -1).prefetch(-1)
 
 
 def prepare_dataset(data_type, batch_size, random_state):
@@ -119,8 +117,10 @@ def prepare_dataset(data_type, batch_size, random_state):
     x_train, x_val, y_train, y_val = train_test_split(x_train, y_train, test_size=SplitRatio.validation_ratio.value,
                                                       random_state=random_state)
     # Creating Tensorflow datasets
-    atom_dim, bond_dim, train_dataset = tf_dataset_creator(x_train, y_train, batch_size, mpnn, conv)
-    atom_dim_valid, bond_dim_valid, valid_dataset = tf_dataset_creator(x_val, y_val, batch_size, mpnn, conv)
-    atom_dim_test, bond_dim_test, test_dataset = tf_dataset_creator(x_test, y_test, len(x_test), mpnn, conv)
+    atom_dim, bond_dim, cell_line_dim, train_dataset = tf_dataset_creator(x_train, y_train, batch_size, mpnn, conv)
+    atom_dim_valid, bond_dim_valid, cell_line_dim_valid, valid_dataset = tf_dataset_creator(x_val, y_val, batch_size,
+                                                                                            mpnn, conv)
+    atom_dim_test, bond_dim_test, cell_line_dim_test, test_dataset = tf_dataset_creator(x_test, y_test, len(x_test),
+                                                                                        mpnn, conv)
 
-    return atom_dim, bond_dim, train_dataset, valid_dataset, test_dataset
+    return atom_dim, bond_dim, cell_line_dim, train_dataset, valid_dataset, test_dataset, y_test
