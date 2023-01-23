@@ -2,7 +2,7 @@
 
 [Miniforge](https://github.com/conda-forge/miniforge) is recommended for compatibility.
 
-1. You need to download datasets [here](https://drive.google.com/drive/folders/1FW8UoOv-gIO_U4eTK3uLTBCR_2Dt3i7v?usp=sharing).
+1. You need to download datasets [here](https://drive.google.com/drive/folders/1xfcCyPMVGzhtBxrfv3VtTyCqsOG9oRQk?usp=sharing).
 
 * Do not change naming and folder structure. You should put the ```data``` folder at the same level as the ```src``` folder.
 
