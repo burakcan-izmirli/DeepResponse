@@ -22,13 +22,13 @@ conda activate deep_response
 ```
 5. You can run the model via the terminal:
 ```
-python3 deep_response.py [-seed -batch_size -epoch -learning_rate -d data_type]
+python3 -m src.python.deep_response [-seed -batch_size -epoch -learning_rate -d data_type]
 ```
 You can check the arguments and their default values:
 ```
-python3 deep_response.py --help
+python3 -m src.python.deep_response --help
 ```
 An example of a running statement with all variables:
 ```
-python3 deep_response.py -s 12 -b 64 -e 50 -l 0.01 -d 'pathway'
+python3 -m src.python.deep_response -s 12 -b 64 -e 50 -l 0.01 -d 'pathway'
 ```
