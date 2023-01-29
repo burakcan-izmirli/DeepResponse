@@ -17,14 +17,6 @@ from src.model.mlp import create_mlp_model
 from src.util.static.default_arguments import DefaultArguments
 
 tf.config.run_functions_eagerly(True)
-
-# %%
-# Creating Comet experiment to track results
-load_dotenv('../../dev.env')
-experiment = Experiment(
-    api_key=os.environ.get("api_key"),
-    project_name="general",
-    workspace="burakcan-izmirli")
 # %%
 # Arguments
 parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
@@ -34,6 +26,7 @@ parser.add_argument("-e", "--epoch", default=DefaultArguments.epoch.value, type=
 parser.add_argument("-l", "--learning_rate", default=DefaultArguments.learning_rate.value, type=float,
                     help="Learning Rate")
 parser.add_argument("-d", "--data_type", default=DefaultArguments.data_type.value, type=str, help="Data Type")
+parser.add_argument("-c", "--comet", default=False, type=bool, help="Whether to use comet or not")
 args = vars(parser.parse_args())
 
 random_state = args["seed"]
@@ -41,6 +34,15 @@ batch_size = args["batch_size"]
 learning_rate = args["learning_rate"]
 epoch = args["epoch"]
 data_type = args["data_type"]
+use_comet = args["comet"]
+# %%
+# Creating Comet experiment to track results
+if use_comet:
+    load_dotenv('./dev.env')
+    experiment = Experiment(
+        api_key=os.environ.get("api_key"),
+        project_name=os.environ.get("project_name"),
+        workspace=os.environ.get("workspace"))
 # %%
 # Seeding everything to ensure reproducibility
 np.random.seed(random_state)

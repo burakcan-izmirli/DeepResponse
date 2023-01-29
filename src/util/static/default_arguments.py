@@ -7,3 +7,4 @@ class DefaultArguments(Enum):
     epoch: int = 50
     learning_rate: float = 0.01
     data_type: str = 'pathway'
+    comet: bool = False
