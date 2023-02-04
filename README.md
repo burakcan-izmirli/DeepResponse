@@ -1,5 +1,7 @@
 # Deep Response
 
+## Installation
+
 1. [Miniforge](https://github.com/conda-forge/miniforge) is recommended for compatibility with Apple Silicon devices.
 For the other devices, you can install ```Anaconda``` or ```Miniconda```.
 
@@ -18,6 +20,7 @@ For the other devices, you can install ```Anaconda``` or ```Miniconda```.
 ```
 conda env create -f [apple_silicon_env.yml/linux_env.yml]
 ```
+## Execution
 
 5. It will create an environment as "deep-response", and you need to activate it.
 ```
@@ -35,3 +38,14 @@ An example of a running statement with all variables:
 ```
 python3 -m src.model.deep_response -s 12 -b 64 -e 50 -l 0.01 -d 'pathway' -c False
 ```
+### Usage with Comet
+
+You can run DeepResponse with [Comet](https://www.comet.com) support.
+
+In order to do that, you need to pass ```True``` as Comet variable.
+
+```
+python3 -m src.model.deep_response -comet True
+```
+
+You need to specify ```api_key```, ```project_name``` and ```workspace```. Recommended way is to create ```dev.env``` at the same level as ```.yml``` files and store these variables in there. 
