@@ -103,8 +103,13 @@ model.compile(loss=keras.losses.MeanSquaredError(), optimizer=keras.optimizers.A
 # Printing summary of the model
 print(model.summary())
 # %%
+history = model.fit(
+    train_dataset,
+    validation_data=valid_dataset,
+    epochs=epoch,
+    verbose=1)
+
+# %%
 predictions = model.predict(test_dataset, verbose=1)
 mse = mean_squared_error(y_test, predictions)
 print(mse)
-
-#%%
