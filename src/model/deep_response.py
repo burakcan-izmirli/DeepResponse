@@ -7,14 +7,15 @@ import tensorflow as tf
 from comet_ml import Experiment
 from dotenv import load_dotenv
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
-from sklearn.metrics import mean_squared_error
 from tensorflow import keras
 
 from src.data.prepare_dataset import prepare_dataset
+
 from src.model.mpnn import create_mpnn_model
 from src.model.conv import create_conv_model
 from src.model.mlp import create_mlp_model
-from src.util.static.default_arguments import DefaultArguments
+from src.model.evaluation_metrics import evaluate_model
+from src.util.enum.default_arguments import DefaultArguments
 
 tf.config.run_functions_eagerly(True)
 # %%
@@ -111,5 +112,4 @@ history = model.fit(
 
 # %%
 predictions = model.predict(test_dataset, verbose=1)
-mse = mean_squared_error(y_test, predictions)
-print(mse)
+print(evaluate_model(y_test, predictions))
