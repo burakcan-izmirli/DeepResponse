@@ -3,7 +3,7 @@ Multilayer perceptron model
 """
 from tensorflow.keras import layers
 
-from src.util.static.mlp_model import MLPModelDense, MLPModelDropout
+from src.util.enum.mlp_model import MLPModelDense, MLPModelDropout
 
 
 def create_mlp_model(dense_units, concat):

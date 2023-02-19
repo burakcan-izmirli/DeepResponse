@@ -3,7 +3,7 @@ Convolutional model
 """
 from tensorflow.keras import layers
 
-from src.util.static.convolutional_model import ConvolutionalModel
+from src.util.enum.convolutional_model import ConvolutionalModel
 
 
 def create_conv_model(cell_line_dims):

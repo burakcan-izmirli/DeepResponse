@@ -8,8 +8,8 @@ from sklearn.model_selection import train_test_split
 
 from src.model.mpnn import graphs_from_smiles, prepare_batch
 
-from src.util.static.data_type import DataType
-from src.util.static.split_ratio import SplitRatio
+from src.util.enum.data_type import DataType
+from src.util.enum.split_ratio import SplitRatio
 
 
 def read_or_create_raw_dataset(data_type):

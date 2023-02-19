@@ -12,8 +12,8 @@ from tensorflow import keras
 from tqdm import tqdm
 import warnings
 
-from src.util.static.atom_featurizer_sets import AtomFeaturizerSets
-from src.util.static.bond_featurizer_sets import BondFeaturizerSets
+from src.util.enum.atom_featurizer_sets import AtomFeaturizerSets
+from src.util.enum.bond_featurizer_sets import BondFeaturizerSets
 
 warnings.filterwarnings('ignore')
 
