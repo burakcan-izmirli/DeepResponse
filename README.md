@@ -1,5 +1,7 @@
 # Deep Response
 
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/09c5b2bbb6c24d83ba363c7a5c059f7f)](https://app.codacy.com/gh/burakcan-izmirli/DeepResponse?utm_source=github.com&utm_medium=referral&utm_content=burakcan-izmirli/DeepResponse&utm_campaign=Badge_Grade_Settings)
+
 ## Installation
 
 1. [Miniforge](https://github.com/conda-forge/miniforge) is recommended for compatibility with Apple Silicon devices.
