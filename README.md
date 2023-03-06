@@ -1,6 +1,7 @@
 # Deep Response
 
-[![Codacy Badge](https://app.codacy.com/project/badge/Grade/2c363a3a149c48fa9b6f75af1307e1b2)](https://www.codacy.com/gh/burakcan-izmirli/DeepResponse/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=burakcan-izmirli/DeepResponse&amp;utm_campaign=Badge_Grade)
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/2c363a3a149c48fa9b6f75af1307e1b2)](https://www.codacy.com/gh/burakcan-izmirli/DeepResponse/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=burakcan-izmirli/DeepResponse&amp;utm_campaign=Badge_Grade)   ![Platform](https://img.shields.io/static/v1?label=platform&message=macos%20%7C%20linux&color=informational)
+![License](https://img.shields.io/static/v1?label=license&message=CC-BY-NC-ND-4.0&color=green)
 
 ## Installation
 
@@ -51,3 +52,8 @@ python3 -m src.model.deep_response -comet True
 ```
 
 You need to specify ```api_key```, ```project_name``` and ```workspace```. Recommended way is to create ```dev.env``` at the same level as ```.yml``` files and store these variables in there. 
+
+## License
+
+<a rel="license" href="http://creativecommons.org/licenses/by-nc-nd/4.0/"><img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by-nc-nd/4.0/88x31.png" /></a><br />This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-nc-nd/4.0/">Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International License</a>.
+
