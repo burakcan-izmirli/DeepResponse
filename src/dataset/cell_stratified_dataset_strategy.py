@@ -52,7 +52,8 @@ class CellStratifiedDatasetStrategy(BaseDatasetStrategy):
             atom_dim, bond_dim, cell_line_dim, train_dataset = self.tf_dataset_creator(x_train, y_train, batch_size,
                                                                                        mpnn_dataset, conv_dataset)
             atom_dim_test, bond_dim_test, cell_line_dim_test, test_dataset = self.tf_dataset_creator(x_test, y_test,
-                                                                                                     len(x_test),
+                                                                                                     batch_size,
                                                                                                      mpnn_dataset,
                                                                                                      conv_dataset)
-            yield atom_dim, bond_dim, cell_line_dim, train_dataset, test_dataset
+            yield (atom_dim, bond_dim, cell_line_dim), train_dataset, test_dataset, y_test
+
