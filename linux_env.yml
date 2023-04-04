@@ -70,7 +70,7 @@ dependencies:
       - rsa==4.9
       - six==1.15.0
       - tensorboard==2.11.2
-      - tensorboard-data-server==0.6.1
+      - tensorboard-dataset-server==0.6.1
       - tensorboard-plugin-wit==1.8.1
       - tensorflow==2.6.0
       - tensorflow-estimator==2.11.0

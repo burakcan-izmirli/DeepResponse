@@ -7,17 +7,51 @@ for molecular property prediction tutorial.
 from rdkit import Chem
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras import layers
 from tensorflow import keras
 from tqdm import tqdm
 import warnings
 
-from src.util.enum.atom_featurizer_sets import AtomFeaturizerSets
-from src.util.enum.bond_featurizer_sets import BondFeaturizerSets
+from helper.enum.model.atom_featurizer_sets import AtomFeaturizerSets
+from helper.enum.model.bond_featurizer_sets import BondFeaturizerSets
 
 warnings.filterwarnings('ignore')
 
+class MessagePassing(keras.layers.Layer):
+    def __init__(self, units, steps, **kwargs):
+        super().__init__(**kwargs)
+        self.units = units
+        self.steps = steps
 
+    def build(self, input_shape):
+        """
+        Build
+        :param input_shape: Input shape
+        """
+        self.atom_dim = input_shape[0][-1]
+        self.message_step = EdgeNetwork()
+        self.pad_length = max(0, self.units - self.atom_dim)
+        self.update_step = layers.GRUCell(self.atom_dim + self.pad_length)
+        self.built = True
+
+    def call(self, inputs):
+        atom_features, bond_features, pair_indices = inputs
+
+        # Pad atom features if number of desired units exceeds atom_features dim.
+        # Alternatively, a dense layer could be used here.
+        atom_features_updated = tf.pad(atom_features, [(0, 0), (0, self.pad_length)])
+
+        # Perform a number of steps of message passing
+        for i in range(self.steps):
+            # Aggregate information from neighbors
+            atom_features_aggregated = self.message_step(
+                [atom_features_updated, bond_features, pair_indices]
+            )
+
+            # Update node state via a step of GRU
+            atom_features_updated, _ = self.update_step(
+                atom_features_aggregated, atom_features_updated
+            )
+        return atom_features_updated
 # %%
 
 class Featurizer:
@@ -134,7 +168,6 @@ def graphs_from_smiles(smiles_list):
     atom_features_list = []
     bond_features_list = []
     pair_indices_list = []
-
     for smiles in tqdm(smiles_list):
         molecule = molecule_from_smiles(smiles)
         atom_features, bond_features, pair_indices = graph_from_molecule(molecule)
@@ -143,7 +176,7 @@ def graphs_from_smiles(smiles_list):
         bond_features_list.append(bond_features)
         pair_indices_list.append(pair_indices)
 
-    # Convert lists to ragged tensors for tf.data.Dataset later on
+    # Convert lists to ragged tensors for tf.dataset.Dataset later on
     return (
         tf.ragged.constant(atom_features_list, dtype=tf.float32),
         tf.ragged.constant(bond_features_list, dtype=tf.float32),
@@ -182,7 +215,7 @@ def prepare_batch(x_batch_conv, x_batch_mpnn, y_batch):
     return (x_batch_conv, atom_features, bond_features, pair_indices, molecule_indicator), y_batch
 
 
-class EdgeNetwork(layers.Layer):
+class EdgeNetwork(keras.layers.Layer):
     def build(self, input_shape):
         self.atom_dim = input_shape[0][-1]
         self.bond_dim = input_shape[1][-1]
@@ -222,7 +255,7 @@ class EdgeNetwork(layers.Layer):
 
 # %%
 
-class MessagePassing(layers.Layer):
+class MessagePassing(keras.layers.Layer):
     def __init__(self, units, steps, **kwargs):
         super().__init__(**kwargs)
         self.units = units
@@ -236,7 +269,7 @@ class MessagePassing(layers.Layer):
         self.atom_dim = input_shape[0][-1]
         self.message_step = EdgeNetwork()
         self.pad_length = max(0, self.units - self.atom_dim)
-        self.update_step = layers.GRUCell(self.atom_dim + self.pad_length)
+        self.update_step = keras.layers.GRUCell(self.atom_dim + self.pad_length)
         self.built = True
 
     def call(self, inputs):
@@ -262,7 +295,7 @@ class MessagePassing(layers.Layer):
 
 # %%
 
-class PartitionPadding(layers.Layer):
+class PartitionPadding(keras.layers.Layer):
     def __init__(self, batch_size, **kwargs):
         super().__init__(**kwargs)
         self.batch_size = batch_size
@@ -286,26 +319,26 @@ class PartitionPadding(layers.Layer):
             axis=0,
         )
 
-        # Remove empty subgraphs (usually for last batch in data)
+        # Remove empty subgraphs (usually for last batch in dataset)
         gather_indices = tf.where(tf.reduce_sum(atom_features_stacked, (1, 2)) != 0)
         gather_indices = tf.squeeze(gather_indices, axis=-1)
         return tf.gather(atom_features_stacked, gather_indices, axis=0)
 
 
-class TransformerEncoderReadout(layers.Layer):
+class TransformerEncoderReadout(keras.layers.Layer):
     def __init__(
             self, num_heads=8, embed_dim=64, dense_dim=512, batch_size=32, **kwargs
     ):
         super().__init__(**kwargs)
 
         self.partition_padding = PartitionPadding(batch_size)
-        self.attention = layers.MultiHeadAttention(num_heads, embed_dim)
+        self.attention = keras.layers.MultiHeadAttention(num_heads, embed_dim)
         self.dense_proj = keras.Sequential(
-            [layers.Dense(dense_dim, activation="relu"), layers.Dense(embed_dim), ]
+            [keras.layers.Dense(dense_dim, activation="relu"), keras.layers.Dense(embed_dim), ]
         )
-        self.layernorm_1 = layers.LayerNormalization()
-        self.layernorm_2 = layers.LayerNormalization()
-        self.average_pooling = layers.GlobalAveragePooling1D()
+        self.layernorm_1 = keras.layers.LayerNormalization()
+        self.layernorm_2 = keras.layers.LayerNormalization()
+        self.average_pooling = keras.layers.GlobalAveragePooling1D()
 
     def call(self, inputs):
         x = self.partition_padding(inputs)
@@ -315,19 +348,3 @@ class TransformerEncoderReadout(layers.Layer):
         proj_input = self.layernorm_1(x + attention_output)
         proj_output = self.layernorm_2(proj_input + self.dense_proj(proj_input))
         return self.average_pooling(proj_output)
-
-
-def create_mpnn_model(atom_dims, bond_dims, message_units, message_steps, num_attention_heads, dense_units, batch_size):
-    """
-    Creating MPNN model
-    """
-    atom_features = layers.Input((atom_dims), dtype="float32", name="atom_features")
-    bond_features = layers.Input((bond_dims), dtype="float32", name="bond_features")
-    pair_indices = layers.Input((2), dtype="int32", name="pair_indices")
-    molecule_indicator = layers.Input((), dtype="int32", name="molecule_indicator")
-
-    x = MessagePassing(message_units, message_steps)([atom_features, bond_features, pair_indices])
-
-    x = TransformerEncoderReadout(num_attention_heads, message_units, dense_units, batch_size)([x, molecule_indicator])
-
-    return atom_features, bond_features, pair_indices, molecule_indicator, x
