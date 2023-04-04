@@ -1,19 +1,19 @@
-""" Evaluation metrics """
+""" Evaluate model """
 
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, precision_score, recall_score, \
     accuracy_score, f1_score, matthews_corrcoef, auc
 from sklearn.preprocessing import Binarizer
 from scipy.stats import pearsonr, spearmanr
 
-from src.util.enum.binary_threshold import BinaryThreshold
+from helper.enum.model.binary_threshold import BinaryThreshold
 
 
 def binarize_data(data, threshold=BinaryThreshold.threshold.value):
     """
-    Binarize data based on given threshold to calculate classification metrics
-    :param data: data
+    Binarize dataset based on given threshold to calculate classification metrics
+    :param data: dataset
     :param threshold: Threshold
-    :return Binary data
+    :return Binary dataset
     """
     return Binarizer(threshold=threshold).transform(data)
 
@@ -27,7 +27,7 @@ def evaluate_model(y_test, y_pred):
     """
     return {"Mean Squared Error": mean_squared_error(y_test, y_pred),
             "Mean Absolute Error": mean_absolute_error(y_test, y_pred),
-            "Root Mean Squared Error": mean_squared_error(squared=False),
+            "Root Mean Squared Error": mean_squared_error(y_test, y_pred, squared=False),
             "R2 Score": r2_score(y_test, y_pred),
             "Pearson": pearsonr(y_test, y_pred),
             "Spearman": spearmanr(y_test, y_pred),
