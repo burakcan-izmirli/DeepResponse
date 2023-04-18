@@ -1,4 +1,5 @@
 """ Create dataset """
+import numpy as np
 import pandas as pd
 from os import walk
 from tqdm import tqdm
@@ -74,10 +75,9 @@ def create_dataset(cell_lines_path='raw/full/',
         cell_line_features_raw = pd.read_csv(cell_lines_path + i, sep='\t')
         cell_line_features_raw.drop(columns=['gene_name'], inplace=True)
         cell_lines_list.append({'cell_line_name': name,
-                                'cell_line_features': cell_line_features_raw})
+                                'cell_line_features': cell_line_features_raw.to_numpy(dtype=np.float16)})
 
     cell_line_features_df = pd.DataFrame(cell_lines_list)
-
     dataset = pd.merge(drug_cell_smiles_df, cell_line_features_df, how='outer')
     dataset.drop("ecfp4", axis=1, inplace=True)
     dataset.dropna(inplace=True)
@@ -112,7 +112,7 @@ def create_l1000_dataset(cell_lines_path='raw/full/',
         cell_line_features.reset_index(inplace=True, drop=True)
         cell_line_features.drop(columns=['gene_name'], inplace=True)
         cell_lines_list.append({'cell_line_name': name,
-                                'cell_line_features': cell_line_features})
+                                'cell_line_features': cell_line_features.to_numpy(dtype=np.float16)})
 
     cell_line_features_l1000 = pd.DataFrame(cell_lines_list)
 
@@ -151,7 +151,7 @@ def create_pathway_sorted_dataset(cell_lines_path='raw/full/',
         cell_line_features_df = pd.concat([cell_line_features_df, genes_without_pathway])
         cell_line_features_df.drop(columns=['gene_name'], inplace=True)
         cell_lines_list.append({'cell_line_name': name,
-                                'cell_line_features': cell_line_features_df})
+                                'cell_line_features': cell_line_features_df.to_numpy(dtype=np.float16)})
 
     cell_line_features_pathway_sorted = pd.DataFrame(cell_lines_list)
 
@@ -185,7 +185,7 @@ def create_pathway_sorted_reduced_dataset(cell_lines_path='raw/full/',
         cell_line_features_df.dropna(inplace=True)
         cell_line_features_df.drop(columns=['gene_name'], inplace=True)
         cell_lines_list.append({'cell_line_name': name,
-                                'cell_line_features': cell_line_features_df})
+                                'cell_line_features': cell_line_features_df.to_numpy(dtype=np.float16)})
 
     cell_line_features_pathway_sorted_reduced = pd.DataFrame(cell_lines_list)
 
@@ -217,4 +217,3 @@ def create_tissue_dataset(tissue_name):
     tissue_filtered_dataset.to_pickle(f"processed/dataset_tissue_{tissue_name}.pkl")
 
     return tissue_filtered_dataset
-
