@@ -3,11 +3,11 @@ import logging
 
 from tensorflow import keras
 
-from src.model.training.base_training_strategy import BaseModelStrategy
+from src.model.training.base_training_strategy import BaseTrainingStrategy
 from src.model.evaluate_model import evaluate_model
 
 
-class RandomSplitTrainingStrategy(BaseModelStrategy):
+class RandomSplitTrainingStrategy(BaseTrainingStrategy):
     """ Random split training strategy """
 
     def train_and_evaluate_model(self, model_creation_strategy, dataset_tuple, batch_size, learning_rate, epoch):
