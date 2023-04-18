@@ -42,7 +42,6 @@ class CellStratifiedDatasetStrategy(BaseDatasetStrategy):
         mpnn_dataset, conv_dataset = self.create_mpnn_and_conv_dataset(dataset)
 
         dataset = dataset[['drug_name', 'cell_line_name', 'pic50']]
-        dataset = dataset.head(1000)
         splitter = self.create_splitter(dataset, random_state)
         for train, test in splitter:
             train_df = dataset[dataset.index.isin(train)]
