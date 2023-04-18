@@ -2,6 +2,7 @@
 import pandas as pd
 import numpy as np
 import tensorflow as tf
+from tqdm import tqdm
 from abc import ABC, abstractmethod
 
 from src.model.model_creation.mpnn import graphs_from_smiles, prepare_batch
@@ -51,9 +52,8 @@ class BaseDatasetStrategy(ABC):
         :return: Converted dataset
         """
         last_list = []
-        for row in data:
-            dump_list = row.to_numpy()
-            last_list.append(dump_list)
+        for row in tqdm(data):
+            last_list.append(row)
 
         return np.array(last_list)
 
@@ -67,16 +67,12 @@ class BaseDatasetStrategy(ABC):
         :param conv: Conv dataset
         :return: atom_dim, bond_dim and dataset
         """
-        tf_dataset = tf.data.Dataset.from_tensor_slices((x, (y)))
-
-        batched_dataset = tf_dataset.batch(batch_size)
-        for i in batched_dataset.as_numpy_iterator():
-            x_data, y_data = i
-
-        x_data = pd.DataFrame(x_data.astype('str'), columns=['drug_name', 'cell_line_name'])
+        x_data = pd.DataFrame(x.astype('str'), columns=['drug_name', 'cell_line_name'])
         x_data = x_data.merge(mpnn).merge(conv)
+        del mpnn, conv
         x_mpnn = graphs_from_smiles(x_data.smiles)
         x_conv = self.convert_conv_dataset(x_data.cell_line_features)
-        batched_dataset = tf.data.Dataset.from_tensor_slices((x_conv, x_mpnn, (y_data))).batch(1)
-        return x_mpnn[0][0][0].shape[0], x_mpnn[1][0][0].shape[0], x_conv.shape, \
-            batched_dataset.map(prepare_batch, -1).prefetch(-1)
+        del x_data
+        batched_dataset = tf.data.Dataset.from_tensor_slices((x_conv, x_mpnn, (y.pic50))). \
+            batch(batch_size).map(prepare_batch, num_parallel_calls=-1).prefetch(tf.data.AUTOTUNE)
+        return x_mpnn[0][0][0].shape[0], x_mpnn[1][0][0].shape[0], x_conv.shape, batched_dataset
