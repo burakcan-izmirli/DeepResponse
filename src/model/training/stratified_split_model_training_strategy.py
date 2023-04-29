@@ -25,4 +25,4 @@ class StratifiedSplitTrainingStrategy(BaseTrainingStrategy):
             model.fit(train_dataset,
                       validation_data=test_dataset,
                       epochs=epoch,
-                      verbose=1)
+                      verbose=2)

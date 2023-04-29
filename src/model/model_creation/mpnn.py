@@ -8,13 +8,14 @@ from rdkit import Chem
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
-from tqdm import tqdm
+import logging
 import warnings
 
 from helper.enum.model.atom_featurizer_sets import AtomFeaturizerSets
 from helper.enum.model.bond_featurizer_sets import BondFeaturizerSets
 
 warnings.filterwarnings('ignore')
+
 
 class MessagePassing(keras.layers.Layer):
     def __init__(self, units, steps, **kwargs):
@@ -165,10 +166,11 @@ def graph_from_molecule(molecule):
 
 def graphs_from_smiles(smiles_list):
     # Initialize graphs
+    logging.info("Graphs from smiles is started.")
     atom_features_list = []
     bond_features_list = []
     pair_indices_list = []
-    for smiles in tqdm(smiles_list):
+    for smiles in smiles_list:
         molecule = molecule_from_smiles(smiles)
         atom_features, bond_features, pair_indices = graph_from_molecule(molecule)
 

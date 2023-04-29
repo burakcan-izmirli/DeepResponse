@@ -1,4 +1,5 @@
 """ Base dataset strategy """
+import logging
 import pandas as pd
 import numpy as np
 import tensorflow as tf
@@ -51,6 +52,7 @@ class BaseDatasetStrategy(ABC):
         :param data: Raw conv dataset
         :return: Converted dataset
         """
+        logging.info("Convert conv dataset is started.")
         last_list = []
         for row in tqdm(data):
             last_list.append(row)

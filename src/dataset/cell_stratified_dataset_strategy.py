@@ -23,8 +23,8 @@ class CellStratifiedDatasetStrategy(BaseDatasetStrategy):
         dataset = pd.merge(dataset, grouped_by_cell_df, how='outer').sort_values('group').reset_index(drop=True)
         leave_one_group_out = LeaveOneGroupOut()
 
-        return leave_one_group_out.split(dataset[['drug_name', 'cell_line_name']], dataset[['pic50']],
-                                         groups=dataset['group'])
+        return dataset, leave_one_group_out.split(dataset[['drug_name', 'cell_line_name']], dataset[['pic50']],
+                                                  groups=dataset['group'])
 
     def split_dataset(self, dataset, *args, **kwargs):
         """ Split dataset """
@@ -42,7 +42,7 @@ class CellStratifiedDatasetStrategy(BaseDatasetStrategy):
         mpnn_dataset, conv_dataset = self.create_mpnn_and_conv_dataset(dataset)
 
         dataset = dataset[['drug_name', 'cell_line_name', 'pic50']]
-        splitter = self.create_splitter(dataset, random_state)
+        dataset, splitter = self.create_splitter(dataset, random_state)
         for train, test in splitter:
             train_df = dataset[dataset.index.isin(train)]
             x_train, y_train = self.split_dataset(train_df)
