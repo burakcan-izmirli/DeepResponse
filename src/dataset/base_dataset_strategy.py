@@ -3,7 +3,6 @@ import logging
 import pandas as pd
 import numpy as np
 import tensorflow as tf
-from tqdm import tqdm
 from abc import ABC, abstractmethod
 
 from src.model.model_creation.mpnn import graphs_from_smiles, prepare_batch
@@ -54,7 +53,7 @@ class BaseDatasetStrategy(ABC):
         """
         logging.info("Convert conv dataset is started.")
         last_list = []
-        for row in tqdm(data):
+        for row in data:
             last_list.append(row)
 
         return np.array(last_list)
