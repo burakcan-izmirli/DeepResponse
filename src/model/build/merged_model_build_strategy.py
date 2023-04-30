@@ -1,7 +1,7 @@
 """ Merged model strategy """
 from tensorflow import keras
 
-from src.model.model_creation.base_model_creation_strategy import BaseModelCreationStrategy
+from src.model.build.base_model_build_strategy import BaseModelCreationStrategy
 
 
 class MergedModelStrategy(BaseModelCreationStrategy):
@@ -23,13 +23,14 @@ class MergedModelStrategy(BaseModelCreationStrategy):
         :param dense_units: Dense units
         :return: Merged model
         """
-        atom_features, bond_features, pair_indices, molecule_indicator, mpnn = self.create_mpnn_model(atom_dims,
-                                                                                                      bond_dims,
-                                                                                                      message_units,
-                                                                                                      message_steps,
-                                                                                                      num_attention_heads,
-                                                                                                      dense_units,
-                                                                                                      batch_size)
+        atom_features, bond_features, pair_indices, molecule_indicator, mpnn = \
+            self.create_graph_neural_network(atom_dims,
+                                             bond_dims,
+                                             message_units,
+                                             message_steps,
+                                             num_attention_heads,
+                                             dense_units,
+                                             batch_size)
         cell_line_features, conv = self.create_conv_model(cell_line_dims)
 
         concat = keras.layers.concatenate([conv, mpnn], name='concat')

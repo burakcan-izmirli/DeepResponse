@@ -1,5 +1,4 @@
 """ Stratified split training strategy """
-import logging
 from tensorflow import keras
 
 from src.model.training.base_training_strategy import BaseTrainingStrategy

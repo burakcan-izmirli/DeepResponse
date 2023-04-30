@@ -10,7 +10,7 @@ from src.dataset.cell_stratified_dataset_strategy import CellStratifiedDatasetSt
 from src.dataset.drug_stratified_dataset_strategy import DrugStratifiedDatasetStrategy
 from src.dataset.drug_cell_stratified_dataset_strategy import DrugCellStratifiedDatasetStrategy
 
-from src.model.model_creation.merged_model_creation_strategy import MergedModelStrategy
+from src.model.build.merged_model_build_strategy import MergedModelStrategy
 
 from src.model.training.stratified_split_model_training_strategy import StratifiedSplitTrainingStrategy
 from src.model.training.random_split_training_strategy import RandomSplitTrainingStrategy
