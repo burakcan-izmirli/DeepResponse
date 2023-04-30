@@ -38,7 +38,6 @@ class RandomSplitDatasetStrategy(BaseDatasetStrategy):
         mpnn_dataset, conv_dataset = self.create_mpnn_and_conv_dataset(dataset)
 
         dataset = dataset[['drug_name', 'cell_line_name', 'pic50']]
-        print(len(dataset))
         # Splitting dataset into train, validation and test
         x_train, x_val, x_test, y_train, y_val, y_test = self.split_dataset(dataset, random_state)
         # Creating Tensorflow datasets

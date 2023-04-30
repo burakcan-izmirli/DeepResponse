@@ -2,7 +2,8 @@
 from abc import ABC, abstractmethod
 from tensorflow import keras
 
-from src.model.model_creation.mpnn import MessagePassing, TransformerEncoderReadout
+from src.model.build.graph_neural_network.message_passing import MessagePassing
+from src.model.build.graph_neural_network.transformer_encoder import TransformerEncoder
 
 from helper.enum.model.convolutional_model import ConvolutionalModel
 from helper.enum.model.mlp_model import MLPModelDense, MLPModelDropout
@@ -17,10 +18,10 @@ class BaseModelCreationStrategy(ABC):
         """ Create model """
         pass
 
-    def create_mpnn_model(self, atom_dims, bond_dims, message_units, message_steps, num_attention_heads, dense_units,
-                          batch_size):
+    def create_graph_neural_network(self, atom_dims, bond_dims, message_units, message_steps, num_attention_heads,
+                                    dense_units, batch_size):
         """
-        Creating MPNN model
+        Creating graph neural network
         """
         atom_features = keras.layers.Input((atom_dims), dtype="float32", name="atom_features")
         bond_features = keras.layers.Input((bond_dims), dtype="float32", name="bond_features")
@@ -29,8 +30,7 @@ class BaseModelCreationStrategy(ABC):
 
         x = MessagePassing(message_units, message_steps)([atom_features, bond_features, pair_indices])
 
-        x = TransformerEncoderReadout(num_attention_heads, message_units, dense_units, batch_size)(
-            [x, molecule_indicator])
+        x = TransformerEncoder(num_attention_heads, message_units, dense_units, batch_size)([x, molecule_indicator])
 
         return atom_features, bond_features, pair_indices, molecule_indicator, x
 

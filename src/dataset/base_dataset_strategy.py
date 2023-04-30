@@ -5,7 +5,7 @@ import numpy as np
 import tensorflow as tf
 from abc import ABC, abstractmethod
 
-from src.model.model_creation.mpnn import graphs_from_smiles, prepare_batch
+from src.model.build.graph_neural_network.mpnn import graphs_from_smiles, prepare_batch
 
 
 class BaseDatasetStrategy(ABC):
