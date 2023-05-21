@@ -1,4 +1,4 @@
 /model_summary.png
-/dataset/processed/*
-/dataset/raw/*
+/dataset/*/processed/*
+/dataset/*/raw/*
 /.idea/*
