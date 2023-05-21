@@ -1,4 +1,4 @@
-""" Create dataset """
+""" Create GDSC dataset """
 import numpy as np
 import pandas as pd
 from os import walk
@@ -47,11 +47,10 @@ def create_drug_cell_dataframe(drug_cell_path=
     :param drug_smiles_path: Path of drug-smiles pairs dataset
     """
     drug_cell_pairs_raw = pd.read_csv(drug_cell_path, sep='\t')
-    drug_cell_pairs_raw.rename(columns={'DRUG_NAME': 'drug_name', 'CELL_LINE_NAME': 'cell_line_name',
-                                        'pIC50': 'pic50'}, inplace=True)
+    drug_cell_pairs_raw.columns = drug_cell_pairs_raw.columns.str.lower()
 
     drug_smiles_raw = pd.read_csv(drug_smiles_path, sep='\t')
-    drug_smiles_raw.rename(columns={'DRUG_NAME': 'drug_name', 'SMILES': 'smiles', 'ECFP4': 'ecfp4'}, inplace=True)
+    drug_smiles_raw.columns = drug_smiles_raw.columns.str.lower()
 
     return pd.merge(drug_cell_pairs_raw, drug_smiles_raw, how='outer')
 
@@ -217,3 +216,4 @@ def create_tissue_dataset(tissue_name):
     tissue_filtered_dataset.to_pickle(f"processed/dataset_tissue_{tissue_name}.pkl")
 
     return tissue_filtered_dataset
+
