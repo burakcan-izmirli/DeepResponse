@@ -76,13 +76,6 @@ def preprocess_cnv_data(cnv_path='raw/CCLE_cnv_df_extended_genes_cell_lines_v1_s
 
 
 # %%
-
-# preprocess_gene_expression_data()
-# preprocess_mutation_data()
-# preprocess_methylation_data()
-# preprocess_cnv_data()
-
-# %%
 def create_drug_cell_dataframe(drug_cell_path=
                                'raw/CCLE_drug_response_drug_name_cell_line_name_pIC50_v1_edits_and_fps.txt',
                                drug_smiles_path='raw/CCLE_drug_name_SMILES_and_ECFP4_v1.txt'):
