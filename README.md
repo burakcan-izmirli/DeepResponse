@@ -24,7 +24,7 @@
 
 **Table 1.** Evaluation results (in terms of RMSE) of DeepResponse and other methods on the GDSC dataset (10-fold cross-validation). DeepResponse is the **state-of-art** compared to existing models on all split strategies.
 
-<img width="1701" alt="Results of DeepResponse" src="https://github.com/burakcan-izmirli/DeepResponse/assets/65293991/84150523-36cc-4457-9b05-d190c8a452ab">
+<img width="1720" alt="Results of DeepResponse" src="https://github.com/burakcan-izmirli/DeepResponse/assets/65293991/e4f75524-057d-403a-b083-59eb264a91b4">
 
 
 
