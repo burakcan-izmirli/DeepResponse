@@ -11,8 +11,9 @@ from src.model.build.graph_neural_network.mpnn import graphs_from_smiles, prepar
 class BaseDatasetStrategy(ABC):
     """ Base dataset src """
 
-    def __init__(self, data_path):
+    def __init__(self, data_path, evaluation_data_path=None):
         self.data_path = data_path
+        self.evaluation_data_path = evaluation_data_path
 
     @abstractmethod
     def split_dataset(self, dataset, *args, **kwargs):
@@ -29,11 +30,10 @@ class BaseDatasetStrategy(ABC):
         """ Prepare dataset """
         pass
 
+    @abstractmethod
     def read_and_shuffle_dataset(self, random_state):
         """ Read and shuffle dataset """
-        # Shuffling dataset
-        dataset_raw = pd.read_pickle(self.data_path)
-        return dataset_raw.sample(frac=1, random_state=random_state).reset_index(drop=True)
+        pass
 
     @staticmethod
     def create_mpnn_and_conv_dataset(dataset_raw):
