@@ -7,19 +7,26 @@ from helper.enum.default_arguments import DefaultArguments
 def argument_parser():
     """ Argument parser """
     parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
-    parser.add_argument("-c", "--use_comet", default=False, type=bool, help="Whether to use comet or not")
-    parser.add_argument("-d", "--data_type", default=DefaultArguments.data_type.value, type=str,
-                        help="['normal', 'l1000', 'pathway', 'pathway_reduced', 'digestive']")
-    parser.add_argument("-s", "--split_type", default=DefaultArguments.split_type.value, type=str,
-                        help="['random', 'cell_stratified', 'drug_stratified', 'drug_cell_stratified']")
-    parser.add_argument("-r", "--random_state", default=DefaultArguments.random_state.value, type=int,
+    parser.add_argument("-uc", "--use_comet", default=False, type=bool, help="Whether to use comet or not")
+    parser.add_argument("-ds", "--data_source", default='gdsc', type=str, help="['gdsc', 'ccle', 'nci_60']")
+    parser.add_argument("-es", "--evaluation_source", default=None, help="['gdsc', 'ccle', 'nci_60']")
+    parser.add_argument("-dt", "--data_type", default=DefaultArguments.data_type.value, type=str,
+                        help="For all data sources: ['normal', 'l1000'] "
+                             "For just GDSC: ['pathway', 'pathway_reduced', 'digestive']")
+    parser.add_argument("-st", "--split_type", default=DefaultArguments.split_type.value, type=str,
+                        help="['random', 'cell_stratified', 'drug_stratified', 'drug_cell_stratified', 'cross_domain']")
+    parser.add_argument("-rs", "--random_state", default=DefaultArguments.random_state.value, type=int,
                         help="Random State")
-    parser.add_argument("-b", "--batch_size", default=DefaultArguments.batch_size.value, type=int, help="Batch Size")
+    parser.add_argument("-bs", "--batch_size", default=DefaultArguments.batch_size.value, type=int, help="Batch Size")
     parser.add_argument("-e", "--epoch", default=DefaultArguments.epoch.value, type=int, help="Epoch size")
-    parser.add_argument("-l", "--learning_rate", default=DefaultArguments.learning_rate.value, type=float,
+    parser.add_argument("-lr", "--learning_rate", default=DefaultArguments.learning_rate.value, type=float,
                         help="Learning Rate")
 
     args = vars(parser.parse_args())
 
-    return args["use_comet"], args["data_type"], args["split_type"], args["random_state"], args["batch_size"], \
-        args["epoch"], args["learning_rate"]
+    # If evaluation source is not given then use data source as evaluation source.
+    if args["evaluation_source"] is None:
+        args["evaluation_source"] = args["data_source"]
+
+    return args["use_comet"], args["data_source"], args["evaluation_source"], args["data_type"], args["split_type"], \
+        args["random_state"], args["batch_size"], args["epoch"], args["learning_rate"]
