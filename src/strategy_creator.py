@@ -9,6 +9,7 @@ from src.dataset.random_split_dataset_strategy import RandomSplitDatasetStrategy
 from src.dataset.cell_stratified_dataset_strategy import CellStratifiedDatasetStrategy
 from src.dataset.drug_stratified_dataset_strategy import DrugStratifiedDatasetStrategy
 from src.dataset.drug_cell_stratified_dataset_strategy import DrugCellStratifiedDatasetStrategy
+from src.dataset.cross_domain_dataset_strategy import CrossDomainDatasetStrategy
 
 from src.model.build.merged_model_build_strategy import MergedModelStrategy
 
@@ -19,8 +20,11 @@ from src.model.training.random_split_training_strategy import RandomSplitTrainin
 class StrategyCreator:
     """ Strategy creator """
 
-    def __init__(self, use_comet, data_type, split_type, random_state, batch_size, epoch, learning_rate):
+    def __init__(self, use_comet, data_source, evaluation_source, data_type, split_type, random_state, batch_size,
+                 epoch, learning_rate):
         self.use_comet = use_comet
+        self.data_source = data_source
+        self.evaluation_source = evaluation_source
         self.data_type = data_type
         self.split_type = split_type
         self.random_state = random_state
@@ -40,11 +44,22 @@ class StrategyCreator:
     def get_dataset_path_by_data_type(self):
         """ Get dataset path by data type """
         paths = {
-            DataType.normal.label: DataType.normal.path,
-            DataType.l1000.label: DataType.l1000.path,
-            DataType.pathway.label: DataType.pathway.path,
-            DataType.pathway_reduced.label: DataType.pathway_reduced.path,
-            DataType.digestive.label: DataType.digestive.path
+            DataType.normal.label: DataType.prefix.path + self.data_source.upper() + DataType.normal.path,
+            DataType.l1000.label: DataType.prefix.path + self.data_source.upper() + DataType.l1000.path,
+            DataType.pathway.label: DataType.prefix.path + self.data_source.upper() + DataType.pathway.path,
+            DataType.pathway_reduced.label: DataType.prefix.path + self.data_source.upper() + DataType.pathway_reduced.path,
+            DataType.digestive.label: DataType.prefix.path + self.data_source.upper() + DataType.digestive.path
+        }
+        return paths[self.data_type]
+
+    def get_evaluation_dataset_path_by_data_type(self):
+        """ Get evaluation dataset path by data type """
+        paths = {
+            DataType.normal.label: DataType.prefix.path + self.evaluation_source.upper() + DataType.normal.path,
+            DataType.l1000.label: DataType.prefix.path + self.evaluation_source.upper() + DataType.l1000.path,
+            DataType.pathway.label: DataType.prefix.path + self.evaluation_source.upper() + DataType.pathway.path,
+            DataType.pathway_reduced.label: DataType.prefix.path + self.evaluation_source.upper() + DataType.pathway_reduced.path,
+            DataType.digestive.label: DataType.prefix.path + self.evaluation_source.upper() + DataType.digestive.path
         }
         return paths[self.data_type]
 
@@ -58,7 +73,10 @@ class StrategyCreator:
             'drug_stratified': {'dataset': DrugStratifiedDatasetStrategy(self.get_dataset_path_by_data_type()),
                                 'training': StratifiedSplitTrainingStrategy()},
             'drug_cell_stratified': {'dataset': DrugCellStratifiedDatasetStrategy(self.get_dataset_path_by_data_type()),
-                                     'training': StratifiedSplitTrainingStrategy()}
+                                     'training': StratifiedSplitTrainingStrategy()},
+            'cross_domain': {'dataset': CrossDomainDatasetStrategy(self.get_dataset_path_by_data_type(),
+                                                                   self.get_evaluation_dataset_path_by_data_type()),
+                             'training': RandomSplitTrainingStrategy()},
         }
         return strategies[self.split_type]
 
