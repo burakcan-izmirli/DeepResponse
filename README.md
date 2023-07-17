@@ -6,12 +6,27 @@
 
 ## Abstract
 
-Assessing the best treatment option for each patient is the main goal of precision medicine. Patients with the same diagnosis may display varying sensitivity to the applied treatment due to genetic heterogeneity, especially in cancers. With the aim of predicting drug response in advance, saving valuable time, and preventing the administration of ineffective drugs, computational approaches that utilise genetic features of patients have been developed. Here, we propose DeepResponse, a machine learning-based system that predicts drug responses (sensitivity) of cancer cells. DeepResponse employs gene expression, mutation, copy number variation, and methylation profiles of different cancer cell lines (each representing an individual tumour) obtained from large-scale profiling/screening projects, together with drugs’ molecular features at input level and process them via hybrid convolutional and graph-transformer deep neural networks to learn the relationship between multi-omics features of the tumour and its sensitivity to the administered drug. Both the performance results and in vitro validation experiments indicated DeepResponse successfully predicts drug sensitivity of cancer cells, and especially the multi-omics aspect benefited the learning process and yielded better performance compared to the state-of-the-art. DeepResponse can be used for early-stage discovery of new drug candidates and for repurposing the existing ones against resistant tumours.
+  Assessing the best treatment option for each patient is the main goal of precision medicine. Patients with the same diagnosis may display varying sensitivity to the applied treatment due to genetic heterogeneity, especially in cancers. 
+  
+  Here, we propose DeepResponse, a machine learning-based system that predicts drug responses (sensitivity) of cancer cells. DeepResponse employs multi-omics profiles of different cancer cell-lines obtained from large-scale screening projects, together with drugs’ molecular features at the input level, and processing them via hybrid convolutional and graph-transformer deep neural networks to learn the relationship between multi-omics features of the tumour and its sensitivity to the administered drug. 
+  
+  Both the performance results and in vitro validation experiments indicated DeepResponse successfully predicts drug sensitivity of cancer cells, and especially the multi-omics aspect benefited the learning process and yielded better performance compared to the state-of-the-art. DeepResponse can be used for early-stage discovery of new drug candidates and for repurposing the existing ones against resistant tumours.
 
-<img width="816" alt="DeepResponse_HDCGNN model_Figure" src="https://user-images.githubusercontent.com/13165170/235507644-e835668b-7807-453d-9e99-978970015c1d.png">
 
-**Figure.** Hybrid deep convolutional and graph neural network (HDCGNN) architecture of DeepResponse. Multi-omic features of cell lines are processed via deep convolutional neural networks, whereas graph represented drug molecules are proessed by message passing networks containing transformer encoder layers.
- 
+## Architecture
+
+<img width="1500" alt="Architecture of DeepResponse" src="https://github.com/burakcan-izmirli/DeepResponse/assets/65293991/97a7fd5c-28ae-43b8-977d-9503f2627abd">
+
+**Figure 1.** Hybrid deep convolutional and graph neural network (HDCGNN) architecture of DeepResponse. Multi-omic features of cell lines are processed via deep convolutional neural networks, whereas graph represented drug molecules are proessed by message passing networks containing transformer encoder layers.
+
+
+## Results
+
+**Table 1.** Evaluation results (in terms of RMSE) of DeepResponse and other methods on the GDSC dataset (10-fold cross-validation). DeepResponse is the **state-of-art** compared to existing models on all split strategies.
+
+<img width="1701" alt="Results of DeepResponse" src="https://github.com/burakcan-izmirli/DeepResponse/assets/65293991/84150523-36cc-4457-9b05-d190c8a452ab">
+
+
 
 ## Installation
 
