@@ -12,6 +12,17 @@ from src.dataset.base_dataset_strategy import BaseDatasetStrategy
 class DrugStratifiedDatasetStrategy(BaseDatasetStrategy):
     """ Drug stratified dataset strategy """
 
+    def read_and_shuffle_dataset(self, random_state):
+        """ Read and shuffle dataset """
+
+        dataset_raw = pd.read_pickle(self.data_path)
+        # Shuffling dataset
+        dataset_raw = dataset_raw.sample(frac=1, random_state=random_state).reset_index(drop=True)
+
+        evaluation_dataset_raw = None
+
+        return {'dataset': dataset_raw, 'evaluation_dataset': evaluation_dataset_raw}
+
     def create_splitter(self, dataset, random_state):
         """ Create splitter """
         grouped_by_drug_df = dataset.drop_duplicates(subset=['drug_name'], keep='first')
@@ -38,6 +49,8 @@ class DrugStratifiedDatasetStrategy(BaseDatasetStrategy):
         :param random_state: Random state
         :return: atom_dim, bond_dim, train_dataset, valid_dataset, test_dataset
         """
+        dataset = dataset['dataset']
+
         mpnn_dataset, conv_dataset = self.create_mpnn_and_conv_dataset(dataset)
 
         dataset = dataset[['drug_name', 'cell_line_name', 'pic50']]

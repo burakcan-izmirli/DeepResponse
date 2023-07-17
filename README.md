@@ -41,16 +41,30 @@ conda activate deep-response
 ```
 6.  You can run the model via the terminal:
 ```
-python3 -m deep_response [-seed -batch_size -epoch -learning_rate -data_type -comet]
+python3 -m deep_response [--use_comet --data_source --evaluation_source --data_type --split_type --random_state --batch_size --epoch --learning_rate]
 ```
 You can check the arguments and their default values:
 ```
 python3 -m deep_response --help
 ```
-An example of a running statement with all variables:
+An example of a running statement with all parameters:
 ```
-python3 -m deep_response -s 12 -b 64 -e 50 -l 0.01 -d 'pathway' -c False
+python3 -m deep_response --use_comet True --data_source 'gdsc' --evaluation_source 'ccle' --data_type 'l1000' --split_type 'random' --random_state 28 --batch_size 64 --epoch 50 --learning_rate 0.01
 ```
+
+## Parameter Compliance Matrix
+
+| Data Source | Evaluation Source | Data Type                                              | Split Type                                                           |
+|-------------|-------------------|--------------------------------------------------------|----------------------------------------------------------------------|
+| `gdsc`      | `None`            | `[normal, l1000, pathway, pathway_reduced, digestive]` | `[random, cell_stratified,  drug_stratified,  drug_cell_stratified]` |
+| `gdsc`      | `ccle`            | `[normal, l1000]`                                      | `[cross_domain]`                                                     |
+| `gdsc`      | `nci_60`          | `[normal, l1000]`                                      | `[cross_domain]`                                                     |
+| `gdsc`      | `ccle`            | `[normal, l1000]`                                      | `[cross_domain]`                                                     |
+| `ccle`      | `None`            | `[normal, l1000]`                                      | `[random, cell_stratified,  drug_stratified,  drug_cell_stratified]` |
+| `ccle`      | `nci_60`          | `[normal, l1000]`                                      | `[cross_domain]`                                                     |
+| `ccle`      | `gdsc`            | `[normal, l1000]`                                      | `[cross_domain]`                                                     |
+
+
 ### Usage with Comet
 
 You can run DeepResponse with [Comet](https://www.comet.com) support.
@@ -58,7 +72,7 @@ You can run DeepResponse with [Comet](https://www.comet.com) support.
 In order to do that, you need to pass ```True``` as Comet variable.
 
 ```
-python3 -m deep_response -comet True
+python3 -m deep_response --use_comet True
 ```
 
 You need to specify ```api_key```, ```project_name``` and ```workspace```. Recommended way is to create ```dev.env``` at the same level as ```.yml``` files and store these variables in there. 
