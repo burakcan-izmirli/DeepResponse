@@ -213,7 +213,7 @@ def create_l1000_dataset(gene_exp_path='raw/CCLE_gene_exp_cell_lines_preprocesse
                          mutation_path='raw/CCLE_mutation_cell_lines_preprocessed.csv',
                          methylation_path='raw/CCLE_methylation_cell_lines_preprocessed.csv',
                          cnv_path='raw/CCLE_cnv_cell_lines_preprocessed.csv',
-                         export_path='processed/dataset.pkl'):
+                         export_path='processed/dataset_l1000.pkl'):
     """
     Creating dataset using all genes and without any pathway or tissue information
     :param gene_exp_path: Path of gene expression dataset
@@ -242,7 +242,7 @@ def create_l1000_dataset(gene_exp_path='raw/CCLE_gene_exp_cell_lines_preprocesse
             cell_line_features_last = pd.merge(cell_line_features_last, cell_line_features_dump, how='left',
                                                on='gene_name')
         cell_line_features_last.columns = ['gene_name', 'Exp', 'Mut', 'Met', 'Cnv']
-        if len(cell_line_features_last.columns[cell_line_features_last.isna().any()].tolist()) > 0:
+        if len(cell_line_features_last.columns[cell_line_features_last.isna().all()].tolist()) > 0:
             continue
         cell_line_features_last.drop(columns=['gene_name'], inplace=True)
         cell_lines_list.append({'cell_line_name': cell_line,
@@ -256,3 +256,6 @@ def create_l1000_dataset(gene_exp_path='raw/CCLE_gene_exp_cell_lines_preprocesse
     dataset.to_pickle(export_path)
 
     return dataset
+
+#%%
+create_l1000_dataset()

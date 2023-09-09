@@ -155,7 +155,7 @@ def create_l1000_dataset(gene_exp_path='raw/NCI-60_gene_exp_cell_lines_preproces
                          mutation_path='raw/NCI-60_mutation_cell_lines_preprocessed.csv',
                          methylation_path='raw/NCI-60_methylation_cell_lines_preprocessed.csv',
                          cnv_path='raw/NCI-60_cnv_cell_lines_preprocessed.csv',
-                         export_path='processed/dataset.pkl'):
+                         export_path='processed/dataset_l1000.pkl'):
     """
     Creating dataset using all genes and without any pathway or tissue information
     :param gene_exp_path: Path of gene expression dataset
@@ -198,3 +198,5 @@ def create_l1000_dataset(gene_exp_path='raw/NCI-60_gene_exp_cell_lines_preproces
     dataset.to_pickle(export_path)
 
     return dataset
+
+#%%
