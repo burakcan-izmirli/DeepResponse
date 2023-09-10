@@ -1,4 +1,6 @@
 """ Random split dataset strategy """
+import pandas as pd
+
 from sklearn.model_selection import train_test_split
 
 from helper.enum.dataset.split_ratio import SplitRatio
@@ -7,6 +9,19 @@ from src.dataset.base_dataset_strategy import BaseDatasetStrategy
 
 class RandomSplitDatasetStrategy(BaseDatasetStrategy):
     """ Random split dataset strategy """
+
+    def read_and_shuffle_dataset(self, random_state):
+        """ Read and shuffle dataset """
+
+        dataset_raw = pd.read_pickle(self.data_path)
+        # Shuffling dataset
+        dataset_raw = dataset_raw.sample(frac=1, random_state=random_state).reset_index(drop=True)
+
+        evaluation_dataset_raw = pd.read_pickle(self.evaluation_data_path)
+        evaluation_dataset_raw = evaluation_dataset_raw.sample(frac=1, random_state=random_state). \
+            reset_index(drop=True)
+
+        return {'dataset': dataset_raw, 'evaluation_dataset': evaluation_dataset_raw}
 
     def create_splitter(self, dataset, random_state):
         """ Create splitter """
