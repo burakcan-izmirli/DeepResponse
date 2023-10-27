@@ -11,7 +11,7 @@ def argument_parser():
     parser.add_argument("-ds", "--data_source", default='gdsc', type=str, help="['gdsc', 'ccle', 'nci_60']")
     parser.add_argument("-es", "--evaluation_source", default=None, help="['gdsc', 'ccle', 'nci_60']")
     parser.add_argument("-dt", "--data_type", default=DefaultArguments.data_type.value, type=str,
-                        help="For all data sources: ['normal', 'l1000'] "
+                        help="For all data sources: ['normal', 'l1000', 'l1000_cross_domain] "
                              "For just GDSC: ['pathway', 'pathway_reduced', 'digestive']")
     parser.add_argument("-st", "--split_type", default=DefaultArguments.split_type.value, type=str,
                         help="['random', 'cell_stratified', 'drug_stratified', 'drug_cell_stratified', 'cross_domain']")
