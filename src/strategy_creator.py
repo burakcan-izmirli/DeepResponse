@@ -46,6 +46,7 @@ class StrategyCreator:
         paths = {
             DataType.normal.label: DataType.prefix.path + self.data_source.upper() + DataType.normal.path,
             DataType.l1000.label: DataType.prefix.path + self.data_source.upper() + DataType.l1000.path,
+            DataType.l1000_cross_domain.label: DataType.prefix.path + self.data_source.upper() + DataType.l1000_cross_domain.path,
             DataType.pathway.label: DataType.prefix.path + self.data_source.upper() + DataType.pathway.path,
             DataType.pathway_reduced.label: DataType.prefix.path + self.data_source.upper() + DataType.pathway_reduced.path,
             DataType.digestive.label: DataType.prefix.path + self.data_source.upper() + DataType.digestive.path
@@ -57,6 +58,7 @@ class StrategyCreator:
         paths = {
             DataType.normal.label: DataType.prefix.path + self.evaluation_source.upper() + DataType.normal.path,
             DataType.l1000.label: DataType.prefix.path + self.evaluation_source.upper() + DataType.l1000.path,
+            DataType.l1000_cross_domain.label: DataType.prefix.path + self.data_source.upper() + DataType.l1000_cross_domain.path,
             DataType.pathway.label: DataType.prefix.path + self.evaluation_source.upper() + DataType.pathway.path,
             DataType.pathway_reduced.label: DataType.prefix.path + self.evaluation_source.upper() + DataType.pathway_reduced.path,
             DataType.digestive.label: DataType.prefix.path + self.evaluation_source.upper() + DataType.digestive.path
