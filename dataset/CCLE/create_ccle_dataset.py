@@ -209,13 +209,15 @@ def create_dataset(gene_exp_path='raw/CCLE_gene_exp_cell_lines_preprocessed.csv'
 
 # %%
 
-def create_l1000_dataset(gene_exp_path='raw/CCLE_gene_exp_cell_lines_preprocessed.csv',
+def create_l1000_dataset(cross_domain='False',
+                         gene_exp_path='raw/CCLE_gene_exp_cell_lines_preprocessed.csv',
                          mutation_path='raw/CCLE_mutation_cell_lines_preprocessed.csv',
                          methylation_path='raw/CCLE_methylation_cell_lines_preprocessed.csv',
                          cnv_path='raw/CCLE_cnv_cell_lines_preprocessed.csv',
-                         export_path='processed/dataset_l1000.pkl'):
+                         export_path='processed/dataset_l1000'):
     """
     Creating dataset using all genes and without any pathway or tissue information
+    :param cross_domain: Whether dataset to be used for cross domain analysis
     :param gene_exp_path: Path of gene expression dataset
     :param mutation_path: Path of mutation_path dataset
     :param methylation_path: Path of methylation dataset
@@ -239,7 +241,8 @@ def create_l1000_dataset(gene_exp_path='raw/CCLE_gene_exp_cell_lines_preprocesse
         cell_line_features_last = create_unique_gene_name_df(l1000=True)
         for cell_line_features_dump in [gene_exp_df, mutation_df, methylation_df, cnv_df]:
             cell_line_features_dump = cell_line_features_dump[['gene_name', cell_line]]
-            cell_line_features_last = pd.merge(cell_line_features_last, cell_line_features_dump, how='left',
+            join_type = 'inner' if cross_domain else 'left'
+            cell_line_features_last = pd.merge(cell_line_features_last, cell_line_features_dump, how=join_type,
                                                on='gene_name')
         cell_line_features_last.columns = ['gene_name', 'Exp', 'Mut', 'Met', 'Cnv']
         if len(cell_line_features_last.columns[cell_line_features_last.isna().all()].tolist()) > 0:
@@ -253,9 +256,8 @@ def create_l1000_dataset(gene_exp_path='raw/CCLE_gene_exp_cell_lines_preprocesse
     dataset = dataset[['drug_name', 'cell_line_name', 'pic50', 'smiles', 'cell_line_features']]
     dataset.dropna(inplace=True)
 
+    export_path = export_path + "_cross_domain.pkl" if cross_domain else export_path + ".pkl"
     dataset.to_pickle(export_path)
 
     return dataset
 
-#%%
-create_l1000_dataset()
