@@ -1,9 +1,10 @@
 """ Stratified split training strategy """
+import logging
 from tensorflow import keras
+from sklearn.metrics import r2_score
 
 from src.model.training.base_training_strategy import BaseTrainingStrategy
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, precision_score, recall_score, \
-    accuracy_score, f1_score, matthews_corrcoef, auc
+from src.model.evaluate_model import evaluate_model
 
 
 class StratifiedSplitTrainingStrategy(BaseTrainingStrategy):
@@ -25,3 +26,6 @@ class StratifiedSplitTrainingStrategy(BaseTrainingStrategy):
                       validation_data=test_dataset,
                       epochs=epoch,
                       verbose=2)
+
+            predictions = model.predict(test_dataset, verbose=2)
+            logging.info(evaluate_model(y_test, predictions))

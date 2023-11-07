@@ -1,12 +1,10 @@
 """ Random split training strategy """
 import logging
-
 from tensorflow import keras
+from sklearn.metrics import r2_score
 
 from src.model.training.base_training_strategy import BaseTrainingStrategy
 from src.model.evaluate_model import evaluate_model
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, precision_score, recall_score, \
-    accuracy_score, f1_score, matthews_corrcoef, auc
 
 
 class RandomSplitTrainingStrategy(BaseTrainingStrategy):

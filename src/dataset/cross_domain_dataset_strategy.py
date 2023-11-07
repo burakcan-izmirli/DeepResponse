@@ -29,14 +29,14 @@ class CrossDomainDatasetStrategy(BaseDatasetStrategy):
     def split_dataset(self, dataset, evaluation_dataset, random_state):
         """ Splitting dataset as train, validation and test """
 
-        x_train_df = dataset[['drug_name', 'cell_line_name']]
-        y_train_df = dataset[['pic50']]
-
-        x_val_df, x_test_df, y_val_df, y_test_df = train_test_split(
-            evaluation_dataset[['drug_name', 'cell_line_name']],
-            evaluation_dataset[['pic50']],
-            test_size=SplitRatio.test_ratio.value,
+        x_train_df, x_val_df, y_val_df, y_train_df = train_test_split(
+            dataset[['drug_name', 'cell_line_name']],
+            dataset[['pic50']],
+            test_size=SplitRatio.validation_ratio.value,
             random_state=random_state)
+
+        x_test_df = evaluation_dataset[['drug_name', 'cell_line_name']]
+        y_test_df = evaluation_dataset[['pic50']]
 
         return x_train_df, x_val_df, x_test_df, y_train_df, y_val_df, y_test_df
 
