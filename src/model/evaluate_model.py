@@ -35,6 +35,5 @@ def evaluate_model(y_test, y_pred):
             "Precision": precision_score(binarize_data(y_test), binarize_data(y_pred)),
             "Recall": recall_score(binarize_data(y_test), binarize_data(y_pred)),
             "F1 Score": f1_score(binarize_data(y_test), binarize_data(y_pred)),
-            "Matthew's Correlation Coef": matthews_corrcoef(binarize_data(y_test), binarize_data(y_pred)),
-            "Area Under Curve:": auc(binarize_data(y_test), binarize_data(y_pred))}
+            "Matthew's Correlation Coef": matthews_corrcoef(binarize_data(y_test), binarize_data(y_pred))}
 
