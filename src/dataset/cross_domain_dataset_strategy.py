@@ -29,7 +29,7 @@ class CrossDomainDatasetStrategy(BaseDatasetStrategy):
     def split_dataset(self, dataset, evaluation_dataset, random_state):
         """ Splitting dataset as train, validation and test """
 
-        x_train_df, x_val_df, y_val_df, y_train_df = train_test_split(
+        x_train_df, x_val_df, y_train_df, y_val_df = train_test_split(
             dataset[['drug_name', 'cell_line_name']],
             dataset[['pic50']],
             test_size=SplitRatio.validation_ratio.value,
@@ -66,8 +66,8 @@ class CrossDomainDatasetStrategy(BaseDatasetStrategy):
         atom_dim_valid, bond_dim_valid, cell_line_dim_valid, valid_dataset = \
             self.tf_dataset_creator(x_val, y_val,
                                     batch_size,
-                                    mpnn_evaluation_dataset,
-                                    conv_evaluation_dataset)
+                                    mpnn_dataset,
+                                    conv_dataset)
         atom_dim_test, bond_dim_test, cell_line_dim_test, test_dataset = \
             self.tf_dataset_creator(x_test, y_test,
                                     batch_size,
