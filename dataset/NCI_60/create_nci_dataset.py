@@ -36,7 +36,7 @@ def preprocess_gene_expression_data(gene_exp_path='raw/NCI-60_gene_exp_extended_
     gene_exp_df_filtered.fillna(gene_exp_df_filtered.mean(numeric_only=True), inplace=True)
     gene_exp_df_filtered.to_csv(export_path, index=False)
 
-# önce cell line'a bakıp çoğu nan ise dropla, öncelikle satır bazlı mean alacağız (en az %10 doluluk), sonra kalanları (en az %50), sutün bazlı. geri kalanları dropla.
+
 def preprocess_mutation_data(mutation_path='raw/NCI-60_mutation_extended_genes_cell_lines_v1_selected.txt',
                              export_path='raw/NCI-60_mutation_cell_lines_preprocessed.csv'):
     """ Preprocess gene expression data """
@@ -93,13 +93,6 @@ def create_drug_cell_dataframe(
 
 
 # %%
-# preprocess_gene_expression_data()
-# preprocess_mutation_data()
-# preprocess_methylation_data()
-# preprocess_cnv_data()
-
-
-# %%
 def create_dataset(gene_exp_path='raw/NCI-60_gene_exp_cell_lines_preprocessed.csv',
                    mutation_path='raw/NCI-60_mutation_cell_lines_preprocessed.csv',
                    methylation_path='raw/NCI-60_methylation_cell_lines_preprocessed.csv',
@@ -127,13 +120,13 @@ def create_dataset(gene_exp_path='raw/NCI-60_gene_exp_cell_lines_preprocessed.cs
 
     cell_lines_list = []
     for cell_line in tqdm(unique_cell_line_names_list):
-        cell_line_features_last = create_unique_gene_name_df()
+        cell_line_features_last = create_unique_gene_name_df(l1000=True)
         for cell_line_features_dump in [gene_exp_df, mutation_df, methylation_df, cnv_df]:
             cell_line_features_dump = cell_line_features_dump[['gene_name', cell_line]]
             cell_line_features_last = pd.merge(cell_line_features_last, cell_line_features_dump, how='left',
                                                on='gene_name')
         cell_line_features_last.columns = ['gene_name', 'Exp', 'Mut', 'Met', 'Cnv']
-        if len(cell_line_features_last.columns[cell_line_features_last.isna().all()].tolist()) > 0:
+        if len(cell_line_features_last.columns[cell_line_features_last.isna().any()].tolist()) > 0:
             continue
         cell_line_features_last.drop(columns=['gene_name'], inplace=True)
         cell_lines_list.append({'cell_line_name': cell_line,
@@ -199,4 +192,4 @@ def create_l1000_dataset(gene_exp_path='raw/NCI-60_gene_exp_cell_lines_preproces
 
     return dataset
 
-#%%
+# %%
