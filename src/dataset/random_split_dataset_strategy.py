@@ -17,11 +17,11 @@ class RandomSplitDatasetStrategy(BaseDatasetStrategy):
         # Shuffling dataset
         dataset_raw = dataset_raw.sample(frac=1, random_state=random_state).reset_index(drop=True)
 
-        evaluation_dataset_raw = pd.read_pickle(self.evaluation_data_path)
-        evaluation_dataset_raw = evaluation_dataset_raw.sample(frac=1, random_state=random_state). \
-            reset_index(drop=True)
+        # evaluation_dataset_raw = pd.read_pickle(self.evaluation_data_path)
+        # evaluation_dataset_raw = evaluation_dataset_raw.sample(frac=1, random_state=random_state). \
+        #     reset_index(drop=True)
 
-        return {'dataset': dataset_raw, 'evaluation_dataset': evaluation_dataset_raw}
+        return {'dataset': dataset_raw}
 
     def create_splitter(self, dataset, random_state):
         """ Create splitter """
@@ -50,8 +50,9 @@ class RandomSplitDatasetStrategy(BaseDatasetStrategy):
         :param random_state: Random state
         :return: atom_dim, bond_dim, train_dataset, valid_dataset, test_dataset
         """
-        mpnn_dataset, conv_dataset = self.create_mpnn_and_conv_dataset(dataset)
 
+        dataset = dataset['dataset']
+        mpnn_dataset, conv_dataset = self.create_mpnn_and_conv_dataset(dataset)
         dataset = dataset[['drug_name', 'cell_line_name', 'pic50']]
         # Splitting dataset into train, validation and test
         x_train, x_val, x_test, y_train, y_val, y_test = self.split_dataset(dataset, random_state)
