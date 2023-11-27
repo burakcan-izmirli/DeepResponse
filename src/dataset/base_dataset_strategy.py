@@ -5,7 +5,7 @@ import numpy as np
 import tensorflow as tf
 from abc import ABC, abstractmethod
 
-from src.model.build.graph_neural_network.mpnn import graphs_from_smiles, prepare_batch
+from src.model.build.graph_neural_network.mpnn import convert_smiles_to_graph, prepare_batch
 
 
 class BaseDatasetStrategy(ABC):
@@ -60,20 +60,29 @@ class BaseDatasetStrategy(ABC):
 
     def tf_dataset_creator(self, x, y, batch_size, mpnn, conv):
         """
-        Creating batched prefetched tensorflow dataset
-        :param x: Independent variables
-        :param y: Dependent variable
-        :param batch_size: Batch size
-        :param mpnn: MPNN dataset
-        :param conv: Conv dataset
-        :return: atom_dim, bond_dim and dataset
+        Create a batched and prefetched TensorFlow dataset.
+
+        Parameters:
+        - x: Independent variables
+        - y: Dependent variable
+        - batch_size: Batch size
+        - mpnn: MPNN dataset
+        - conv: Conv dataset
+
+        Returns:
+        - atom_dim: Dimension of atom features
+        - bond_dim: Dimension of bond features
+        - x_conv_shape: Shape of the convolutional dataset
+        - batched_dataset: TensorFlow batched and prefetched dataset
         """
         x_data = pd.DataFrame(x.astype('str'), columns=['drug_name', 'cell_line_name'])
         x_data = x_data.merge(mpnn).merge(conv)
         del mpnn, conv
-        x_mpnn = graphs_from_smiles(x_data.smiles)
+
+        x_mpnn = convert_smiles_to_graph(x_data.smiles)
         x_conv = self.convert_conv_dataset(x_data.cell_line_features)
         del x_data
         batched_dataset = tf.data.Dataset.from_tensor_slices((x_conv, x_mpnn, (y.pic50))). \
             batch(batch_size).map(prepare_batch, num_parallel_calls=-1).prefetch(tf.data.AUTOTUNE)
+
         return x_mpnn[0][0][0].shape[0], x_mpnn[1][0][0].shape[0], x_conv.shape, batched_dataset

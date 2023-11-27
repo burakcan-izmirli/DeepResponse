@@ -1,5 +1,6 @@
 """ Random split dataset strategy """
 import pandas as pd
+import concurrent.futures
 
 from sklearn.model_selection import train_test_split
 
@@ -43,28 +44,34 @@ class RandomSplitDatasetStrategy(BaseDatasetStrategy):
 
     def prepare_dataset(self, dataset, split_type, batch_size, random_state):
         """
-        Main function for preparing dataset
+        Main function for preparing dataset.
+
         :param dataset: Dataset
         :param split_type: Split type [random, cell_stratified, drug_stratified, cell_drug_stratified]
         :param batch_size: Batch size
         :param random_state: Random state
-        :return: atom_dim, bond_dim, train_dataset, valid_dataset, test_dataset
+        :return: Tuple containing atom_dim, bond_dim, cell_line_dim, train_datasets, valid_datasets, test_datasets, y_test
         """
-
         dataset = dataset['dataset']
         mpnn_dataset, conv_dataset = self.create_mpnn_and_conv_dataset(dataset)
         dataset = dataset[['drug_name', 'cell_line_name', 'pic50']]
-        # Splitting dataset into train, validation and test
+
+        # Splitting dataset into train, validation, and test
         x_train, x_val, x_test, y_train, y_val, y_test = self.split_dataset(dataset, random_state)
-        # Creating Tensorflow datasets
-        atom_dim, bond_dim, cell_line_dim, train_dataset = self.tf_dataset_creator(x_train, y_train, batch_size,
-                                                                                   mpnn_dataset, conv_dataset)
-        atom_dim_valid, bond_dim_valid, cell_line_dim_valid, valid_dataset = self.tf_dataset_creator(x_val, y_val,
-                                                                                                     batch_size,
-                                                                                                     mpnn_dataset,
-                                                                                                     conv_dataset)
-        atom_dim_test, bond_dim_test, cell_line_dim_test, test_dataset = self.tf_dataset_creator(x_test, y_test,
-                                                                                                 batch_size,
-                                                                                                 mpnn_dataset,
-                                                                                                 conv_dataset)
+
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            # Creating Tensorflow datasets in parallel
+            futures = [
+                executor.submit(self.tf_dataset_creator, x_train, y_train, batch_size, mpnn_dataset, conv_dataset),
+                executor.submit(self.tf_dataset_creator, x_val, y_val, batch_size, mpnn_dataset, conv_dataset),
+                executor.submit(self.tf_dataset_creator, x_test, y_test, batch_size, mpnn_dataset, conv_dataset)
+            ]
+
+            # Use as_completed to iterate over completed futures
+            results = [future.result() for future in concurrent.futures.as_completed(futures)]
+
+        # Unpack the results
+        atom_dim, bond_dim, cell_line_dim = results[0][:3]
+        train_dataset, valid_dataset, test_dataset = [result[3] for result in results]
+
         return (atom_dim, bond_dim, cell_line_dim), train_dataset, valid_dataset, test_dataset, y_test
