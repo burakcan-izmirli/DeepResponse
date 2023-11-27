@@ -28,4 +28,4 @@ class StratifiedSplitTrainingStrategy(BaseTrainingStrategy):
                       verbose=2)
 
             predictions = model.predict(test_dataset, verbose=2)
-            logging.info(evaluate_model(y_test, predictions))
+            logging.info(evaluate_model(y_test.values, predictions))
