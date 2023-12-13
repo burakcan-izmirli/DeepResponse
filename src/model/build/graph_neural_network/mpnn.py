@@ -3,16 +3,18 @@ Message-passing neural networks
 This code was derived from Keras' Message-passing neural network (MPNN) for the molecular property prediction tutorial
 and extended based on the needs.
 """
-from rdkit import Chem
 import numpy as np
 import tensorflow as tf
 import logging
 import warnings
+import concurrent.futures
+from rdkit import Chem
 
 from helper.enum.model.atom_featurizer_sets import AtomFeaturizerSets
 from helper.enum.model.bond_featurizer_sets import BondFeaturizerSets
 
 warnings.filterwarnings('ignore')
+
 
 class Featurizer:
     def __init__(self, allowable_sets):
@@ -123,19 +125,43 @@ def graph_from_molecule(molecule):
     return np.array(atom_features), np.array(bond_features), np.array(pair_indices)
 
 
-def graphs_from_smiles(smiles_list):
-    # Initialize graphs
-    logging.info("Graphs from smiles is started.")
-    atom_features_list = []
-    bond_features_list = []
-    pair_indices_list = []
-    for smiles in smiles_list:
-        molecule = molecule_from_smiles(smiles)
-        atom_features, bond_features, pair_indices = graph_from_molecule(molecule)
+def process_smiles(smiles):
+    """
+    Process a SMILES string to generate molecule graph components.
 
-        atom_features_list.append(atom_features)
-        bond_features_list.append(bond_features)
-        pair_indices_list.append(pair_indices)
+    Parameters:
+        smiles (str): The SMILES string representing a molecule.
+
+    Returns:
+        tuple: A tuple containing atom features, bond features, and pair indices.
+    """
+    molecule = molecule_from_smiles(smiles)
+    atom_features, bond_features, pair_indices = graph_from_molecule(molecule)
+    return atom_features, bond_features, pair_indices
+
+
+def convert_smiles_to_graph(smiles_list):
+    """
+    Generate graphs from a list of SMILES strings.
+
+    Parameters:
+        smiles_list (list): List of SMILES strings.
+    Returns:
+        tuple: A tuple containing ragged tensors for atom features, bond features,
+               and pair indices suitable for tf.dataset.Dataset.
+    """
+    logging.info("Graphs from smiles is started.")
+
+    # Use parallel processing to generate graphs
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        # Submit processing tasks for each the SMILES string
+        futures = [executor.submit(process_smiles, smiles) for smiles in smiles_list]
+
+    # Wait for processing to complete and collect results
+    results = [future.result() for future in concurrent.futures.as_completed(futures)]
+
+    # Unpack results
+    atom_features_list, bond_features_list, pair_indices_list = zip(*results)
 
     # Convert lists to ragged tensors for tf.dataset.Dataset later on
     return (
@@ -174,7 +200,3 @@ def prepare_batch(x_batch_conv, x_batch_mpnn, y_batch):
     bond_features = bond_features.merge_dims(outer_axis=0, inner_axis=1).to_tensor()
 
     return (x_batch_conv, atom_features, bond_features, pair_indices, molecule_indicator), y_batch
-
-
-
-

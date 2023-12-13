@@ -2,6 +2,7 @@
 import math
 import numpy as np
 import pandas as pd
+import concurrent.futures
 
 from helper.enum.dataset.n_split import NSplit
 
@@ -66,19 +67,24 @@ class DrugCellStratifiedDatasetStrategy(BaseDatasetStrategy):
 
         dataset = dataset[['drug_name', 'cell_line_name', 'pic50']]
         splitter = self.create_splitter(dataset, random_state)
-        for train_df, test_df in splitter:
-            x_train, y_train = self.split_dataset(train_df)
-            # Creating Tensorflow datasets
-            atom_dim, bond_dim, cell_line_dim, train_dataset = self.tf_dataset_creator(x_train, y_train, batch_size,
-                                                                                       mpnn_dataset, conv_dataset)
-            del train_df, x_train, y_train
 
-            x_test, y_test = self.split_dataset(test_df)
-            # Creating Tensorflow datasets
-            atom_dim_test, bond_dim_test, cell_line_dim_test, test_dataset = self.tf_dataset_creator(x_test, y_test,
-                                                                                                     batch_size,
-                                                                                                     mpnn_dataset,
-                                                                                                     conv_dataset)
-            del test_df, x_test
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            # Creating Tensorflow datasets in parallel for each train-test split
+            futures = []
 
-            yield (atom_dim, bond_dim, cell_line_dim), train_dataset, test_dataset, y_test
+            for train_df, test_df in splitter:
+                train_args = tuple(self.split_dataset(train_df)) + (batch_size, mpnn_dataset, conv_dataset)
+                test_args = tuple(self.split_dataset(test_df)) + (batch_size, mpnn_dataset, conv_dataset)
+
+                futures.append(executor.submit(self.tf_dataset_creator, *train_args))
+                futures.append(executor.submit(self.tf_dataset_creator, *test_args))
+
+            # Use as_completed to iterate over completed futures
+            results = [future.result() for future in concurrent.futures.as_completed(futures)]
+
+        # Unpack the results for the first train-test split
+        atom_dim, bond_dim, cell_line_dim = results[0][:3]
+        train_dataset, test_dataset = [result[3] for result in results]
+
+        yield (atom_dim, bond_dim, cell_line_dim), train_dataset, test_dataset, results[1][-1]
+
