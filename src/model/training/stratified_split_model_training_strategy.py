@@ -5,6 +5,7 @@ from sklearn.metrics import r2_score
 
 from src.model.training.base_training_strategy import BaseTrainingStrategy
 from src.model.evaluate_model import evaluate_model
+from src.model.visualize_results import visualize_results
 
 
 class StratifiedSplitTrainingStrategy(BaseTrainingStrategy):
@@ -28,4 +29,5 @@ class StratifiedSplitTrainingStrategy(BaseTrainingStrategy):
                       verbose=2)
 
             predictions = model.predict(test_dataset, verbose=2)
+            visualize_results(y_test, predictions)
             logging.info(evaluate_model(y_test.values, predictions))
