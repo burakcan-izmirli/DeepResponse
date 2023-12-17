@@ -15,6 +15,8 @@ class RandomSplitDatasetStrategy(BaseDatasetStrategy):
         """ Read and shuffle dataset """
 
         dataset_raw = pd.read_pickle(self.data_path)
+
+        dataset_raw = dataset_raw.head(5000)
         # Shuffling dataset
         dataset_raw = dataset_raw.sample(frac=1, random_state=random_state).reset_index(drop=True)
 
@@ -67,8 +69,7 @@ class RandomSplitDatasetStrategy(BaseDatasetStrategy):
                 executor.submit(self.tf_dataset_creator, x_test, y_test, batch_size, mpnn_dataset, conv_dataset)
             ]
 
-            # Use as_completed to iterate over completed futures
-            results = [future.result() for future in concurrent.futures.as_completed(futures)]
+            results = [future.result() for future in futures]
 
         # Unpack the results
         atom_dim, bond_dim, cell_line_dim = results[0][:3]
