@@ -79,8 +79,7 @@ class DrugCellStratifiedDatasetStrategy(BaseDatasetStrategy):
                 futures.append(executor.submit(self.tf_dataset_creator, *train_args))
                 futures.append(executor.submit(self.tf_dataset_creator, *test_args))
 
-            # Use as_completed to iterate over completed futures
-            results = [future.result() for future in concurrent.futures.as_completed(futures)]
+            results = [future.result() for future in futures]
 
         # Unpack the results for the first train-test split
         atom_dim, bond_dim, cell_line_dim = results[0][:3]

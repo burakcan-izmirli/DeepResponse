@@ -73,7 +73,7 @@ class CrossDomainDatasetStrategy(BaseDatasetStrategy):
             ]
 
             # Use as_completed to iterate over completed futures
-            results = [future.result() for future in concurrent.futures.as_completed(futures)]
+            results = [future.result() for future in futures]
 
         # Unpack the results
         atom_dim, bond_dim, cell_line_dim = results[0][:3]
