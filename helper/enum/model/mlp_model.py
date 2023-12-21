@@ -6,8 +6,8 @@ class MLPModelDense(Enum):
         self.units = units
         self.activation = activation
 
-    dense_1 = None, 'relu'
-    dense_2 = 128, 'relu'
+    dense_1 = None, 'LeakyReLU'
+    dense_2 = 128, 'LeakyReLU'
     dense_3 = 1, 'linear'
 
 
