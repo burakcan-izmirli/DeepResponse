@@ -7,6 +7,10 @@ from src.model.training.base_training_strategy import BaseTrainingStrategy
 from src.model.evaluate_model import evaluate_model
 from src.model.visualize_results import visualize_results
 
+def r2_loss(y_true, y_pred):
+    SS_res =  keras.backend.sum(keras.backend.square(y_true - y_pred))
+    SS_tot = keras.backend.sum(keras.backend.square(y_true - keras.backend.mean(y_true)))
+    return 1 - ( 1 - SS_res/(SS_tot + keras.backend.epsilon()))
 
 class RandomSplitTrainingStrategy(BaseTrainingStrategy):
     """ Random split training strategy """
@@ -16,7 +20,7 @@ class RandomSplitTrainingStrategy(BaseTrainingStrategy):
         dims, train_dataset, valid_dataset, test_dataset, y_test = dataset_tuple
         model = model_creation_strategy.create_model(*dims, batch_size)
         # logging.info(model.summary())
-        model.compile(loss=keras.losses.MeanSquaredError(),
+        model.compile(loss=r2_score,
                       optimizer=keras.optimizers.Adam(learning_rate=learning_rate),
                       metrics=[keras.metrics.MeanSquaredError(name='mse'),
                                keras.metrics.RootMeanSquaredError(name='rmse'),
