@@ -41,7 +41,7 @@ def sketch_scatter_plot(true_values, predictions, comet):
     # Save the plot as a PNG file
     plt.savefig('scatter_plot.png')
 
-    comet.log_figure(plt)
+    comet.log_figure(figure=plt)
 
 
 def sketch_histogram(true_values, predictions, comet):
@@ -89,7 +89,7 @@ def sketch_histogram(true_values, predictions, comet):
     # Save the plot as a PNG file
     plt.savefig('histogram.png')
 
-    comet.log_figure(plt)
+    comet.log_figure(figure=plt)
 
 
 def visualize_results(true_values, predictions, comet):
