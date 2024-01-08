@@ -16,7 +16,7 @@ class RandomSplitTrainingStrategy(BaseTrainingStrategy):
         dims, train_dataset, valid_dataset, test_dataset, y_test = dataset_tuple
         model = model_creation_strategy.create_model(*dims, batch_size)
         # logging.info(model.summary())
-        model.compile(loss=r2_score,
+        model.compile(loss=keras.losses.MeanSquaredError(),
                       optimizer=keras.optimizers.Adam(learning_rate=learning_rate),
                       metrics=[keras.metrics.MeanSquaredError(name='mse'),
                                keras.metrics.RootMeanSquaredError(name='rmse'),
