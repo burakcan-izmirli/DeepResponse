@@ -16,4 +16,8 @@ class UseCometStrategy(BaseCometStrategy):
         load_dotenv('./dev.env')
         return Experiment(api_key=os.environ.get("api_key"),
                           project_name=os.environ.get("project_name"),
-                          workspace=os.environ.get("workspace"))
+                          workspace=os.environ.get("workspace"),
+                          auto_histogram_tensorboard_logging=True,
+                          auto_histogram_weight_logging=True,
+                          auto_histogram_gradient_logging=True,
+                          auto_histogram_activation_logging=True)

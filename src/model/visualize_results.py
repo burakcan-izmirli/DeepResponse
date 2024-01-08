@@ -1,9 +1,11 @@
 """ Visualizer """
 import logging
+
+import comet_ml
 import matplotlib.pyplot as plt
 
 
-def sketch_scatter_plot(true_values, predictions):
+def sketch_scatter_plot(true_values, predictions, comet):
     """
     This function creates a scatter plot of true values versus predictions.
     The color of each point represents the squared error between the true value and the prediction.
@@ -39,8 +41,10 @@ def sketch_scatter_plot(true_values, predictions):
     # Save the plot as a PNG file
     plt.savefig('scatter_plot.png')
 
+    comet.log_image(plt)
 
-def sketch_histogram(true_values, predictions):
+
+def sketch_histogram(true_values, predictions, comet):
     """
     This function creates two histograms in the same figure, one for the true values and one for the predictions.
 
@@ -85,13 +89,15 @@ def sketch_histogram(true_values, predictions):
     # Save the plot as a PNG file
     plt.savefig('histogram.png')
 
+    comet.log_image(plt)
 
-def visualize_results(true_values, predictions):
+
+def visualize_results(true_values, predictions, comet):
     """ Main function to visualize the results """
     # Calculate min_val and max_val
 
-    sketch_scatter_plot(true_values, predictions)
-    sketch_histogram(true_values, predictions)
+    sketch_scatter_plot(true_values, predictions, comet)
+    sketch_histogram(true_values, predictions, comet)
 
     logging.info("Visualize the results was performed.")
 
