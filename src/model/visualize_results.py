@@ -1,7 +1,10 @@
 """ Visualizer """
+import matplotlib as mpl
+
+mpl.use('TkAgg')
+
 import logging
 
-import comet_ml
 import matplotlib.pyplot as plt
 
 
