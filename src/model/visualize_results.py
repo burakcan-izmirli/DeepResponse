@@ -1,8 +1,4 @@
 """ Visualizer """
-import matplotlib as mpl
-
-mpl.use('TkAgg')
-
 import logging
 
 import matplotlib.pyplot as plt
@@ -44,7 +40,7 @@ def sketch_scatter_plot(true_values, predictions, comet):
     # Save the plot as a PNG file
     plt.savefig('scatter_plot.png')
 
-    comet.log_figure(figure_name='scatter_plot', figure=plt)
+    comet.log_image('scatter_plot.png')
 
 
 def sketch_histogram(true_values, predictions, comet):
@@ -92,7 +88,7 @@ def sketch_histogram(true_values, predictions, comet):
     # Save the plot as a PNG file
     plt.savefig('histogram.png')
 
-    comet.log_figure(figure_name='histogram', figure=plt)
+    comet.log_image('histogram.png')
 
 
 def visualize_results(true_values, predictions, comet):
