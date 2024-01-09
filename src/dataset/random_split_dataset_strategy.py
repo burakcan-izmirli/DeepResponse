@@ -1,8 +1,10 @@
 """ Random split dataset strategy """
 import pandas as pd
+import numpy as np
 import concurrent.futures
 
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 
 from helper.enum.dataset.split_ratio import SplitRatio
 from src.dataset.base_dataset_strategy import BaseDatasetStrategy
@@ -59,6 +61,26 @@ class RandomSplitDatasetStrategy(BaseDatasetStrategy):
 
         # Splitting dataset into train, validation, and test
         x_train, x_val, x_test, y_train, y_val, y_test = self.split_dataset(dataset, random_state)
+
+        scaler = StandardScaler()
+
+        # Assuming 'train_df', 'valid_df', and 'test_df' are your DataFrames
+        scaler = StandardScaler()
+
+        # Concatenate all the arrays in 'cell_line_features' in the training data
+        train_arrays = np.concatenate(x_train['cell_line_features'].values)
+
+        # Fit the scaler on the concatenated data
+        scaler.fit(train_arrays)
+
+        # Define a function to transform each array in 'cell_line_features'
+        def transform_features(features):
+            return scaler.transform(features)
+
+        # Apply the function to the 'cell_line_features' in each DataFrame
+        x_train['cell_line_features'] = x_train['cell_line_features'].apply(transform_features)
+        x_val['cell_line_features'] = x_val['cell_line_features'].apply(transform_features)
+        x_test['cell_line_features'] = x_test['cell_line_features'].apply(transform_features)
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
             # Creating Tensorflow datasets in parallel
