@@ -55,7 +55,7 @@ class RandomSplitDatasetStrategy(BaseDatasetStrategy):
         :param random_state: Random state
         :return: Tuple containing atom_dim, bond_dim, cell_line_dim, train_datasets, valid_datasets, test_datasets, y_test
         """
-        dataset = dataset['dataset'].head(10)
+        dataset = dataset['dataset'].head(1000)
         mpnn_dataset, conv_dataset = self.create_mpnn_and_conv_dataset(dataset)
         dataset = dataset[['drug_name', 'cell_line_name', 'pic50']]
 
@@ -64,11 +64,8 @@ class RandomSplitDatasetStrategy(BaseDatasetStrategy):
 
         scaler = StandardScaler()
 
-        cell_line_name_list = x_train.cell_line_name.tolist()
-
-        print(conv_dataset)
         # Concatenate all the arrays in 'cell_line_features' in the training data
-        train_arrays = np.concatenate(conv_dataset.query('cell_line_name in @cell_line_name_list')['cell_line_features'].values)
+        train_arrays = np.concatenate(conv_dataset.query('cell_line_name in @x_train.cell_line_name.tolist()')['cell_line_features'].values)
 
         # Fit the scaler on the concatenated data
         scaler.fit(train_arrays)
@@ -78,12 +75,12 @@ class RandomSplitDatasetStrategy(BaseDatasetStrategy):
             return scaler.transform(features)
 
         # Apply the function to the 'cell_line_features' in each DataFrame
-        conv_dataset.query('cell_line_name in @cell_line_name_list')['cell_line_features'] = \
-            conv_dataset.query('cell_line_name in @cell_line_name_list')['cell_line_features'].apply(transform_features)
-        conv_dataset.query('cell_line_name not in @cell_line_name_list')['cell_line_features'] = \
-            conv_dataset.query('cell_line_name not in @cell_line_name_list')['cell_line_features'].apply(transform_features)
-        conv_dataset.query('cell_line_name not in @cell_line_name_list')['cell_line_features'] = \
-            conv_dataset.query('cell_line_name not in @cell_line_name_list')['cell_line_features'].apply(transform_features)
+        conv_dataset.query('cell_line_name in @x_train.cell_line_name.tolist()')['cell_line_features'] = \
+            conv_dataset.query('cell_line_name in @x_train.cell_line_name.tolist()')['cell_line_features'].apply(transform_features)
+        conv_dataset.query('cell_line_name in @x_val.cell_line_name.tolist()')['cell_line_features'] = \
+            conv_dataset.query('cell_line_name in @x_val.cell_line_name.tolist()')['cell_line_features'].apply(transform_features)
+        conv_dataset.query('cell_line_name in @@x_test.cell_line_name.tolist()')['cell_line_features'] = \
+            conv_dataset.query('cell_line_name in @@x_test.cell_line_name.tolist()')['cell_line_features'].apply(transform_features)
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
             # Creating Tensorflow datasets in parallel
