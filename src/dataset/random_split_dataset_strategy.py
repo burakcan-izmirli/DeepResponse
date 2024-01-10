@@ -4,7 +4,7 @@ import numpy as np
 import concurrent.futures
 
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
 from helper.enum.dataset.split_ratio import SplitRatio
 from src.dataset.base_dataset_strategy import BaseDatasetStrategy
@@ -55,14 +55,14 @@ class RandomSplitDatasetStrategy(BaseDatasetStrategy):
         :param random_state: Random state
         :return: Tuple containing atom_dim, bond_dim, cell_line_dim, train_datasets, valid_datasets, test_datasets, y_test
         """
-        dataset = dataset['dataset']
+        dataset = dataset['dataset'].head(10)
         mpnn_dataset, conv_dataset = self.create_mpnn_and_conv_dataset(dataset)
         dataset = dataset[['drug_name', 'cell_line_name', 'pic50']]
 
         # Splitting dataset into train, validation, and test
         x_train, x_val, x_test, y_train, y_val, y_test = self.split_dataset(dataset, random_state)
 
-        scaler = StandardScaler()
+        scaler = MinMaxScaler()
 
         # Concatenate all the arrays in 'cell_line_features' in the training data
         train_arrays = np.concatenate(
