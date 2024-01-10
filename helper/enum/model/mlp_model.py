@@ -7,7 +7,7 @@ class MLPModelDense(Enum):
         self.activation = activation
 
     dense_1 = None, 'relu'
-    dense_2 = 16, 'relu'
+    dense_2 = 128, 'relu'
     dense_3 = 1, 'linear'
 
 

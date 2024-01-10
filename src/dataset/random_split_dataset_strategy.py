@@ -55,7 +55,7 @@ class RandomSplitDatasetStrategy(BaseDatasetStrategy):
         :param random_state: Random state
         :return: Tuple containing atom_dim, bond_dim, cell_line_dim, train_datasets, valid_datasets, test_datasets, y_test
         """
-        dataset = dataset['dataset']
+        dataset = dataset['dataset'].head(100)
         mpnn_dataset, conv_dataset = self.create_mpnn_and_conv_dataset(dataset)
         dataset = dataset[['drug_name', 'cell_line_name', 'pic50']]
 
@@ -79,8 +79,11 @@ class RandomSplitDatasetStrategy(BaseDatasetStrategy):
             conv_dataset.query('cell_line_name in @x_train.cell_line_name.tolist()')['cell_line_features'].apply(transform_features)
         conv_dataset.query('cell_line_name in @x_val.cell_line_name.tolist()')['cell_line_features'] = \
             conv_dataset.query('cell_line_name in @x_val.cell_line_name.tolist()')['cell_line_features'].apply(transform_features)
-        conv_dataset.query('cell_line_name in @@x_test.cell_line_name.tolist()')['cell_line_features'] = \
-            conv_dataset.query('cell_line_name in @@x_test.cell_line_name.tolist()')['cell_line_features'].apply(transform_features)
+        conv_dataset.query('cell_line_name in @x_test.cell_line_name.tolist()')['cell_line_features'] = \
+            conv_dataset.query('cell_line_name in @x_test.cell_line_name.tolist()')['cell_line_features'].apply(transform_features)
+
+        print(conv_dataset.query('cell_line_name in @x_val.cell_line_name.tolist()'))
+        print(conv_dataset.query('cell_line_name in @x_test.cell_line_name.tolist()'))
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
             # Creating Tensorflow datasets in parallel
