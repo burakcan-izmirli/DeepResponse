@@ -16,7 +16,10 @@ class RandomSplitTrainingStrategy(BaseTrainingStrategy):
         dims, train_dataset, valid_dataset, test_dataset, y_test = dataset_tuple
         model = model_creation_strategy.create_model(*dims, batch_size)
         # logging.info(model.summary())
-        lr_schedule = keras.optimizers.schedules.ExponentialDecay(learning_rate)
+        lr_schedule = keras.optimizers.schedules.ExponentialDecay(learning_rate,
+                                                                  decay_steps=100000,
+                                                                  decay_rate=0.96,
+                                                                  staircase=True)
 
         model.compile(loss=keras.losses.Huber(),
                       optimizer=keras.optimizers.Adam(lr_schedule),
@@ -32,3 +35,5 @@ class RandomSplitTrainingStrategy(BaseTrainingStrategy):
         predictions = model.predict(test_dataset, verbose=2)
         visualize_results(y_test.values, predictions, comet)
         logging.info(evaluate_model(y_test.values, predictions))
+
+#%%
