@@ -4,7 +4,7 @@ import numpy as np
 import concurrent.futures
 
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from sklearn.preprocessing import StandardScaler
 
 from helper.enum.dataset.split_ratio import SplitRatio
 from src.dataset.base_dataset_strategy import BaseDatasetStrategy
@@ -62,7 +62,7 @@ class RandomSplitDatasetStrategy(BaseDatasetStrategy):
         # Splitting dataset into train, validation, and test
         x_train, x_val, x_test, y_train, y_val, y_test = self.split_dataset(dataset, random_state)
 
-        scaler = MinMaxScaler()
+        scaler = StandardScaler()
 
         # Concatenate all the arrays in 'cell_line_features' in the training data
         train_arrays = np.concatenate(
