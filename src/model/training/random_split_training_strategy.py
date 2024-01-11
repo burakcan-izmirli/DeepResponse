@@ -18,8 +18,7 @@ class RandomSplitTrainingStrategy(BaseTrainingStrategy):
         # logging.info(model.summary())
         lr_schedule = keras.optimizers.schedules.ExponentialDecay(learning_rate,
                                                                   decay_steps=100000,
-                                                                  decay_rate=0.96,
-                                                                  staircase=True)
+                                                                  decay_rate=0.95)
 
         model.compile(loss=keras.losses.Huber(),
                       optimizer=keras.optimizers.Adam(lr_schedule),
