@@ -53,7 +53,7 @@ class BaseModelCreationStrategy(ABC):
         """
         Create MLP model
         """
-        x = keras.layers.Dense(dense_units, activation=MLPModelDense.dense_1.activation)(concat)
+        x = keras.layers.Dense(2048, activation='relu')(concat)
         x = keras.layers.Dense(1024, activation='relu')(x)
         x = keras.layers.Dense(512, activation='relu')(x)
         x = keras.layers.Dense(256, activation='relu')(x)
