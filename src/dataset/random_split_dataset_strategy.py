@@ -62,29 +62,29 @@ class RandomSplitDatasetStrategy(BaseDatasetStrategy):
         # Splitting dataset into train, validation, and test
         x_train, x_val, x_test, y_train, y_val, y_test = self.split_dataset(dataset, random_state)
 
-        scaler = StandardScaler()
-
-        # Concatenate all the arrays in 'cell_line_features' in the training data
-        train_arrays = np.concatenate(
-            conv_dataset.query('cell_line_name in @x_train.cell_line_name.tolist()')['cell_line_features'].values)
-        # Fit the scaler on the concatenated data
-        scaler.fit(train_arrays)
-
-        # Define a function to transform each array in 'cell_line_features'
-        def transform_features(features):
-            return scaler.transform(features)
-
-        # Apply the function to the 'cell_line_features' in each DataFrame
-        x_train_indices = conv_dataset.query('cell_line_name in @x_train.cell_line_name.tolist()').index
-        x_val_indices = conv_dataset.query('cell_line_name in @x_val.cell_line_name.tolist()').index
-        x_test_indices = conv_dataset.query('cell_line_name in @x_test.cell_line_name.tolist()').index
-
-        conv_dataset.loc[x_train_indices, 'cell_line_features'] = conv_dataset.loc[
-            x_train_indices, 'cell_line_features'].apply(transform_features)
-        conv_dataset.loc[x_val_indices, 'cell_line_features'] = conv_dataset.loc[
-            x_val_indices, 'cell_line_features'].apply(transform_features)
-        conv_dataset.loc[x_test_indices, 'cell_line_features'] = conv_dataset.loc[
-            x_test_indices, 'cell_line_features'].apply(transform_features)
+        # scaler = StandardScaler()
+        #
+        # # Concatenate all the arrays in 'cell_line_features' in the training data
+        # train_arrays = np.concatenate(
+        #     conv_dataset.query('cell_line_name in @x_train.cell_line_name.tolist()')['cell_line_features'].values)
+        # # Fit the scaler on the concatenated data
+        # scaler.fit(train_arrays)
+        #
+        # # Define a function to transform each array in 'cell_line_features'
+        # def transform_features(features):
+        #     return scaler.transform(features)
+        #
+        # # Apply the function to the 'cell_line_features' in each DataFrame
+        # x_train_indices = conv_dataset.query('cell_line_name in @x_train.cell_line_name.tolist()').index
+        # x_val_indices = conv_dataset.query('cell_line_name in @x_val.cell_line_name.tolist()').index
+        # x_test_indices = conv_dataset.query('cell_line_name in @x_test.cell_line_name.tolist()').index
+        #
+        # conv_dataset.loc[x_train_indices, 'cell_line_features'] = conv_dataset.loc[
+        #     x_train_indices, 'cell_line_features'].apply(transform_features)
+        # conv_dataset.loc[x_val_indices, 'cell_line_features'] = conv_dataset.loc[
+        #     x_val_indices, 'cell_line_features'].apply(transform_features)
+        # conv_dataset.loc[x_test_indices, 'cell_line_features'] = conv_dataset.loc[
+        #     x_test_indices, 'cell_line_features'].apply(transform_features)
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
             # Creating Tensorflow datasets in parallel
