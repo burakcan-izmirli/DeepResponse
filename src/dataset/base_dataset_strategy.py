@@ -42,6 +42,11 @@ class BaseDatasetStrategy(ABC):
         mpnn = dataset_raw[['drug_name', 'smiles']].drop_duplicates(subset='drug_name')
         conv = dataset_raw[['cell_line_name', 'cell_line_features']].drop_duplicates(subset='cell_line_name')
 
+        def reduce(row):
+            return np.delete(row, 0, axis=1)
+
+        conv['cell_line_features'] = conv['cell_line_features'].apply(reduce)
+
         return mpnn, conv
 
     @staticmethod
