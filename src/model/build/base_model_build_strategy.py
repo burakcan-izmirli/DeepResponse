@@ -43,6 +43,8 @@ class BaseModelCreationStrategy(ABC):
             ConvolutionalModel.conv_1.filters, ConvolutionalModel.conv_1.kernel_size)(input_layer)
         x = keras.layers.Conv2D(
             ConvolutionalModel.conv_2.filters, ConvolutionalModel.conv_2.kernel_size)(x)
+        x = keras.layers.Conv2D(
+            ConvolutionalModel.conv_3.filters, ConvolutionalModel.conv_3.kernel_size)(x)
         x = keras.layers.BatchNormalization()(x)
 
         x = keras.layers.GlobalAveragePooling2D()(x)
