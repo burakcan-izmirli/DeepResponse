@@ -40,19 +40,19 @@ class BaseModelCreationStrategy(ABC):
         """
         input_layer = keras.layers.Input(shape=(cell_line_dims[1], cell_line_dims[2], 1))
 
-        x = keras.layers.Conv2D(32, (3, 3), activation='relu')(input_layer)
+        x = keras.layers.Conv2D(32, (3, 1), activation='relu')(input_layer)
         x = keras.layers.BatchNormalization()(x)
-        x = keras.layers.MaxPooling2D(pool_size=(2, 2))(x)
+        x = keras.layers.MaxPooling2D(pool_size=(2, 1))(x)
 
         # Convolutional Layer 2
-        x = keras.layers.Conv2D(64, (3, 3), activation='relu')(x)
+        x = keras.layers.Conv2D(64, (3, 1), activation='relu')(x)
         x = keras.layers.BatchNormalization()(x)
-        x = keras.layers.MaxPooling2D(pool_size=(2, 2))(x)
+        x = keras.layers.MaxPooling2D(pool_size=(2, 1))(x)
 
         # Convolutional Layer 3
-        x = keras.layers.Conv2D(128, (3, 3), activation='relu')(x)
+        x = keras.layers.Conv2D(128, (3, 1), activation='relu')(x)
         x = keras.layers.BatchNormalization()(x)
-        x = keras.layers.MaxPooling2D(pool_size=(2, 2))(x)
+        x = keras.layers.MaxPooling2D(pool_size=(2, 1))(x)
 
         # Flatten layer
         x = keras.layers.Flatten()(x)
