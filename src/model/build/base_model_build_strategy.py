@@ -39,15 +39,23 @@ class BaseModelCreationStrategy(ABC):
         Create convolutional neural network
         """
         input_layer = keras.layers.Input(shape=(cell_line_dims[1], cell_line_dims[2], 1))
-        x = keras.layers.Conv2D(
-            ConvolutionalModel.conv_1.filters, ConvolutionalModel.conv_1.kernel_size)(input_layer)
-        x = keras.layers.Conv2D(
-            ConvolutionalModel.conv_2.filters, ConvolutionalModel.conv_2.kernel_size)(x)
-        x = keras.layers.Conv2D(
-            ConvolutionalModel.conv_3.filters, ConvolutionalModel.conv_3.kernel_size)(x)
-        x = keras.layers.BatchNormalization()(x)
 
-        x = keras.layers.GlobalAveragePooling2D()(x)
+        x = keras.layers.Conv2D(32, (3, 3), activation='relu')(input_layer)
+        x = keras.layers.BatchNormalization()(x)
+        x = keras.layers.MaxPooling2D(pool_size=(2, 2))(x)
+
+        # Convolutional Layer 2
+        x = keras.layers.Conv2D(64, (3, 3), activation='relu')(x)
+        x = keras.layers.BatchNormalization()(x)
+        x = keras.layers.MaxPooling2D(pool_size=(2, 2))(x)
+
+        # Convolutional Layer 3
+        x = keras.layers.Conv2D(128, (3, 3), activation='relu')(x)
+        x = keras.layers.BatchNormalization()(x)
+        x = keras.layers.MaxPooling2D(pool_size=(2, 2))(x)
+
+        # Flatten layer
+        x = keras.layers.Flatten()(x)
 
         return input_layer, x
 
@@ -55,12 +63,12 @@ class BaseModelCreationStrategy(ABC):
         """
         Create MLP model
         """
-        x = keras.layers.Dense(2048, activation='relu')(concat)
-        x = keras.layers.Dense(1024, activation='relu')(x)
-        x = keras.layers.Dense(512, activation='relu')(x)
-        x = keras.layers.Dense(256, activation='relu')(x)
-        x = keras.layers.Dense(128, activation='relu')(x)
-        x = keras.layers.Dense(64, activation='relu')(x)
+        x = keras.layers.Dense(2048, activation='tanh')(concat)
+        x = keras.layers.Dense(1024, activation='tanh')(x)
+        x = keras.layers.Dense(512, activation='tanh')(x)
+        x = keras.layers.Dense(256, activation='tanh')(x)
+        x = keras.layers.Dense(128, activation='tanh')(x)
+        x = keras.layers.Dense(64, activation='tanh')(x)
         x = keras.layers.Dense(1, activation='linear')(x)
 
         return x
