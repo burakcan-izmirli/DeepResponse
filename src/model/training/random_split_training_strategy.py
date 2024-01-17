@@ -21,25 +21,24 @@ class RandomSplitTrainingStrategy(BaseTrainingStrategy):
     def train_and_evaluate_model(self, model_creation_strategy, dataset_tuple, batch_size, learning_rate, epoch, comet):
         """ Train model and predict """
         dims, train_dataset, valid_dataset, test_dataset, y_test = dataset_tuple
-        model = model_creation_strategy.create_model(*dims, batch_size)
-        # logging.info(model.summary())
-        lr_schedule = keras.optimizers.schedules.ExponentialDecay(learning_rate,
-                                                                  decay_steps=10000,
-                                                                  decay_rate=0.95)
 
-        model.compile(loss=keras.losses.Huber(),
-                      optimizer=keras.optimizers.SGD(learning_rate=learning_rate, momentum=0.9, nesterov=True),
-                      metrics=[keras.metrics.MeanSquaredError(name='mse'),
-                               keras.metrics.RootMeanSquaredError(name='rmse'),
-                               keras.metrics.MeanAbsoluteError(name='mae'),
-                               r2_score])
-        model.fit(train_dataset,
-                  validation_data=valid_dataset,
-                  epochs=epoch,
-                  verbose=2)
+        strategy = tf.distribute.MirroredStrategy()
+
+        with strategy.scope():
+            model = model_creation_strategy.create_model(*dims, batch_size)
+            # logging.info(model.summary())
+
+            model.compile(loss=keras.losses.Huber(),
+                          optimizer=keras.optimizers.SGD(learning_rate=learning_rate, momentum=0.9, nesterov=True),
+                          metrics=[keras.metrics.MeanSquaredError(name='mse'),
+                                   keras.metrics.RootMeanSquaredError(name='rmse'),
+                                   keras.metrics.MeanAbsoluteError(name='mae'),
+                                   r2_score])
+            model.fit(train_dataset,
+                      validation_data=valid_dataset,
+                      epochs=epoch,
+                      verbose=2)
 
         predictions = model.predict(test_dataset, verbose=2)
         visualize_results(y_test.values, predictions, comet)
         logging.info(evaluate_model(y_test.values, predictions))
-
-# %%
