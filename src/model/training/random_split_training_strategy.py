@@ -28,7 +28,7 @@ class RandomSplitTrainingStrategy(BaseTrainingStrategy):
                                                                   decay_rate=0.95)
 
         model.compile(loss=keras.losses.Huber(),
-                      optimizer=keras.optimizers.Adam(lr_schedule),
+                      optimizer=keras.optimizers.SGD(learning_rate=learning_rate, momentum=0.9, nesterov=True),
                       metrics=[keras.metrics.MeanSquaredError(name='mse'),
                                keras.metrics.RootMeanSquaredError(name='rmse'),
                                keras.metrics.MeanAbsoluteError(name='mae'),
