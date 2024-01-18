@@ -61,11 +61,7 @@ class RandomSplitDatasetStrategy(BaseDatasetStrategy):
 
         # Splitting dataset into train, validation, and test
         x_train, x_val, x_test, y_train, y_val, y_test = self.split_dataset(dataset, random_state)
-        x_val, y_val, x_test, y_test = x_train, y_train, x_train, y_train
 
-        print(x_train)
-        print(x_val)
-        print(x_test)
         # scaler = StandardScaler()
         #
         # # Concatenate all the arrays in 'cell_line_features' in the training data
