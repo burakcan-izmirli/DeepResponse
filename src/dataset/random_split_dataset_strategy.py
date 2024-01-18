@@ -55,13 +55,17 @@ class RandomSplitDatasetStrategy(BaseDatasetStrategy):
         :param random_state: Random state
         :return: Tuple containing atom_dim, bond_dim, cell_line_dim, train_datasets, valid_datasets, test_datasets, y_test
         """
-        dataset = dataset['dataset']
+        dataset = dataset['dataset'].head(1000)
         mpnn_dataset, conv_dataset = self.create_mpnn_and_conv_dataset(dataset)
         dataset = dataset[['drug_name', 'cell_line_name', 'pic50']]
 
         # Splitting dataset into train, validation, and test
         x_train, x_val, x_test, y_train, y_val, y_test = self.split_dataset(dataset, random_state)
+        x_val, y_val, x_test, y_test = x_train, y_train, x_train, y_train
 
+        print(x_train)
+        print(x_val)
+        print(x_test)
         # scaler = StandardScaler()
         #
         # # Concatenate all the arrays in 'cell_line_features' in the training data
