@@ -29,7 +29,7 @@ class BaseModelCreationStrategy(ABC):
         molecule_indicator = keras.layers.Input((), dtype="int32", name="molecule_indicator")
 
         x = MessagePassing(message_units, message_steps)([atom_features, bond_features, pair_indices])
-
+        x = TransformerEncoder(num_attention_heads, message_units, dense_units, batch_size)([x, molecule_indicator])
         x = TransformerEncoder(num_attention_heads, message_units, dense_units, batch_size)([x, molecule_indicator])
 
         return atom_features, bond_features, pair_indices, molecule_indicator, x

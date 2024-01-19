@@ -12,7 +12,7 @@ class MessagePassing(tf.keras.layers.Layer):
 
     def __init__(self, units, steps, **kwargs):
         super().__init__(**kwargs)
-        self.units = units
+        self.units = units * 2  # Increased units
         self.steps = steps
         self.atom_dim = None
         self.message_step = None
@@ -31,19 +31,11 @@ class MessagePassing(tf.keras.layers.Layer):
     def call(self, inputs):
         """ Call """
         atom_features, bond_features, pair_indices = inputs
-
-        # Pad atom features if number of desired units exceeds atom_features dim.
-        # Alternatively, a dense layer could be used here.
         atom_features_updated = tf.pad(atom_features, [(0, 0), (0, self.pad_length)])
-
-        # Perform a number of steps of message passing
         for i in range(self.steps):
-            # Aggregate information from neighbors
             atom_features_aggregated = self.message_step(
                 [atom_features_updated, bond_features, pair_indices]
             )
-
-            # Update node state via a step of GRU
             atom_features_updated, _ = self.update_step(
                 atom_features_aggregated, atom_features_updated
             )
