@@ -7,9 +7,9 @@ from src.model.build.base_model_build_strategy import BaseModelCreationStrategy
 class MergedModelStrategy(BaseModelCreationStrategy):
     """ Merged model strategy """
 
-    def create_model(self, atom_dims, bond_dims, cell_line_dims, batch_size=32, message_units=64,
-                     message_steps=4,
-                     num_attention_heads=8,
+    def create_model(self, atom_dims, bond_dims, cell_line_dims, batch_size=32, message_units=128,
+                     message_steps=8,
+                     num_attention_heads=16,
                      dense_units=512):
         """
         Create merged model
