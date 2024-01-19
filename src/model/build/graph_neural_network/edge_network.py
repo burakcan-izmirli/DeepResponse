@@ -16,8 +16,6 @@ class EdgeNetwork(tf.keras.layers.Layer):
         self.kernel = None
         self.bias = None
         self.built = None
-        self.dense1 = tf.keras.layers.Dense(128, activation='relu')  # Added Dense layer
-        self.dense2 = tf.keras.layers.Dense(128, activation='relu')  # Added Dense layer
 
     def build(self, input_shape):
         """ Build edge network"""
@@ -35,11 +33,18 @@ class EdgeNetwork(tf.keras.layers.Layer):
     def call(self, inputs):
         """ Call """
         atom_features, bond_features, pair_indices = inputs
-        bond_features = self.dense1(bond_features)  # Apply transformation to bond features
+
+        # Apply linear transformation to bond features
         bond_features = tf.matmul(bond_features, self.kernel) + self.bias
+
+        # Reshape for neighborhood aggregation later
         bond_features = tf.reshape(bond_features, (-1, self.atom_dim, self.atom_dim))
+
+        # Obtain atom features of neighbors
         atom_features_neighbors = tf.gather(atom_features, pair_indices[:, 1])
         atom_features_neighbors = tf.expand_dims(atom_features_neighbors, axis=-1)
+
+        # Apply neighborhood aggregation
         transformed_features = tf.matmul(bond_features, atom_features_neighbors)
         transformed_features = tf.squeeze(transformed_features, axis=-1)
         aggregated_features = tf.math.unsorted_segment_sum(
@@ -47,5 +52,4 @@ class EdgeNetwork(tf.keras.layers.Layer):
             pair_indices[:, 0],
             num_segments=tf.shape(atom_features)[0],
         )
-        aggregated_features = self.dense2(aggregated_features)  # Apply transformation to aggregated features
         return aggregated_features

@@ -14,9 +14,9 @@ class TransformerEncoder(tf.keras.layers.Layer):
     def __init__(self, num_heads, embed_dim, dense_dim, batch_size, **kwargs):
         super().__init__(**kwargs)
         self.partition_padding = PartitionPadding(batch_size)
-        self.attention = tf.keras.layers.MultiHeadAttention(num_heads * 2, embed_dim)  # Increased attention heads
+        self.attention = tf.keras.layers.MultiHeadAttention(num_heads, embed_dim)
         self.dense_proj = tf.keras.Sequential(
-            [tf.keras.layers.Dense(dense_dim * 2, activation="relu"), tf.keras.layers.Dense(embed_dim * 2), ]  # Increased dense dimensions
+            [tf.keras.layers.Dense(dense_dim, activation="relu"), tf.keras.layers.Dense(embed_dim), ]
         )
         self.normalization_layer_1 = tf.keras.layers.LayerNormalization()
         self.normalization_layer_2 = tf.keras.layers.LayerNormalization()
