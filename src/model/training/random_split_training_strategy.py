@@ -30,8 +30,8 @@ class RandomSplitTrainingStrategy(BaseTrainingStrategy):
             decay_steps=10000,
             decay_rate=0.9)
 
-        model.compile(loss=keras.losses.Huber(),
-                      optimizer=keras.optimizers.AdamW(learning_rate=lr_schedule),
+        model.compile(loss=keras.losses.MeanSquaredError(),
+                      optimizer=keras.optimizers.Adam(learning_rate=lr_schedule),
                       metrics=[keras.metrics.MeanSquaredError(name='mse'),
                                keras.metrics.RootMeanSquaredError(name='rmse'),
                                keras.metrics.MeanAbsoluteError(name='mae'),
