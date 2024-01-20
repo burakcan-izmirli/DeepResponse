@@ -25,8 +25,13 @@ class RandomSplitTrainingStrategy(BaseTrainingStrategy):
         model = model_creation_strategy.create_model(*dims, batch_size)
         # logging.info(model.summary())
 
+        lr_schedule = keras.optimizers.schedules.ExponentialDecay(
+            initial_learning_rate=learning_rate,
+            decay_steps=10000,
+            decay_rate=0.9)
+
         model.compile(loss=keras.losses.Huber(),
-                      optimizer=keras.optimizers.SGD(learning_rate=learning_rate, momentum=0.9, nesterov=True),
+                      optimizer=keras.optimizers.AdamW(learning_rate=lr_schedule),
                       metrics=[keras.metrics.MeanSquaredError(name='mse'),
                                keras.metrics.RootMeanSquaredError(name='rmse'),
                                keras.metrics.MeanAbsoluteError(name='mae'),
