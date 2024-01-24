@@ -63,12 +63,15 @@ class BaseModelCreationStrategy(ABC):
         """
         Create MLP model
         """
-        x = keras.layers.Dense(2048, activation='tanh')(concat)
-        x = keras.layers.Dense(1024, activation='tanh')(x)
-        x = keras.layers.Dense(512, activation='tanh')(x)
-        x = keras.layers.Dense(256, activation='tanh')(x)
-        x = keras.layers.Dense(128, activation='tanh')(x)
-        x = keras.layers.Dense(64, activation='tanh')(x)
+        x = keras.layers.Conv1D(64, 3, activation='relu')(concat)
+        x = keras.layers.LSTM(32)(x)
+        x = keras.layers.Dense(2048, activation='relu')(x)
+        x = keras.layers.Dense(1024, activation='relu')(x)
+        x = keras.layers.Dense(512, activation='relu')(x)
+        x = keras.layers.Dense(256, activation='relu')(x)
+        x = keras.layers.Dense(128, activation='relu')(x)
+        x = keras.layers.Dense(64, activation='relu')(x)
         x = keras.layers.Dense(1, activation='linear')(x)
 
         return x
+
