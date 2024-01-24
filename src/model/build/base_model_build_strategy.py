@@ -63,6 +63,7 @@ class BaseModelCreationStrategy(ABC):
         """
         Create MLP model
         """
+        concat = keras.layers.Reshape((-1, 1))(concat)  # Reshaping the input
         x = keras.layers.Conv1D(64, 3, activation='relu')(concat)
         x = keras.layers.LSTM(32)(x)
         x = keras.layers.Dense(2048, activation='relu')(x)
