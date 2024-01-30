@@ -9,10 +9,10 @@ from src.model.evaluate_model import evaluate_model
 from src.model.visualize_results import visualize_results
 
 
-def r2_score(y_true, y_pred):
+def r2_score_loss(y_true, y_pred):
     SS_res = tf.reduce_sum(tf.square(y_true - y_pred))
     SS_tot = tf.reduce_sum(tf.square(y_true - tf.reduce_mean(y_true)))
-    return (1 - SS_res / (SS_tot + tf.keras.backend.epsilon()))
+    return 1 - SS_res / (SS_tot + tf.keras.backend.epsilon())
 
 
 class RandomSplitTrainingStrategy(BaseTrainingStrategy):
@@ -31,7 +31,7 @@ class RandomSplitTrainingStrategy(BaseTrainingStrategy):
             decay_rate=0.96,
             staircase=True)
 
-        model.compile(loss=keras.losses.MeanSquaredError(),
+        model.compile(loss=r2_score_loss,
                       optimizer=keras.optimizers.Adam(learning_rate=lr_schedule),
                       metrics=[keras.metrics.MeanSquaredError(name='mse'),
                                keras.metrics.RootMeanSquaredError(name='rmse'),
