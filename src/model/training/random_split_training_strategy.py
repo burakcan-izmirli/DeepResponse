@@ -15,6 +15,17 @@ def r2_score_loss(y_true, y_pred):
     return 1 - SS_res / (SS_tot + tf.keras.backend.epsilon())
 
 
+def weighted_mse(y_true, y_pred):
+    # Calculate absolute difference from the mean value 5
+    diff_from_mean = tf.keras.backend.abs(5 - y_true)
+
+    # Square the differences to give more weight to larger differences
+    weights = tf.keras.backend.square(diff_from_mean)
+
+    # Calculate weighted mean squared error
+    return tf.keras.backend.mean(weights * tf.keras.backend.square(y_true - y_pred))
+
+
 class RandomSplitTrainingStrategy(BaseTrainingStrategy):
     """ Random split training strategy """
 
@@ -31,7 +42,7 @@ class RandomSplitTrainingStrategy(BaseTrainingStrategy):
             decay_rate=0.96,
             staircase=True)
 
-        model.compile(loss=r2_score_loss,
+        model.compile(loss=weighted_mse,
                       optimizer=keras.optimizers.Adam(learning_rate=lr_schedule),
                       metrics=[keras.metrics.MeanSquaredError(name='mse'),
                                keras.metrics.RootMeanSquaredError(name='rmse'),
