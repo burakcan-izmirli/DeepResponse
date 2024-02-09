@@ -42,7 +42,7 @@ class RandomSplitTrainingStrategy(BaseTrainingStrategy):
             decay_rate=0.96,
             staircase=True)
 
-        model.compile(loss=weighted_mse,
+        model.compile(loss=keras.losses.MeanSquaredError(),
                       optimizer=keras.optimizers.Adam(learning_rate=lr_schedule),
                       metrics=[keras.metrics.MeanSquaredError(name='mse'),
                                keras.metrics.RootMeanSquaredError(name='rmse'),
