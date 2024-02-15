@@ -72,6 +72,10 @@ class RandomSplitDatasetStrategy(BaseDatasetStrategy):
                                                           stratify=x_train_val['cancer_type'],
                                                           random_state=random_state)
 
+        x_train = x_train.drop(columns=['cancer_type'])
+        x_val = x_val.drop(columns=['cancer_type'])
+        x_test = x_test.drop(columns=['cancer_type'])
+
         return x_train, x_val, x_test, y_train, y_val, y_test
 
     def prepare_dataset(self, dataset, split_type, batch_size, random_state):
