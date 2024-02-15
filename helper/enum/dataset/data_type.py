@@ -8,7 +8,7 @@ class DataType(Enum):
 
     prefix = 'prefix', 'dataset/'
     normal = 'normal', '/processed/dataset.pkl'
-    l1000 = 'l1000', '/processed/dataset_l1000_filtered.pkl'
+    l1000 = 'l1000', '/processed/dataset_l1000_deepcdr.pkl'
     l1000_cross_domain = 'l1000_cross_domain', '/processed/dataset_l1000_cross_domain.pkl'
     pathway = 'pathway', '/processed/dataset_pathway_sorted.pkl'
     pathway_reduced = 'pathway_reduced', '/processed/dataset_pathway_sorted_reduced.pkl'
