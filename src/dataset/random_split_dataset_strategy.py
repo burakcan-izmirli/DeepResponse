@@ -31,50 +31,43 @@ class RandomSplitDatasetStrategy(BaseDatasetStrategy):
         """ Create splitter """
         pass
 
-    def split_dataset(self, dataset, random_state):
-        """ Splitting dataset as train, validation and test """
-
-        x_train_df, x_test_df, y_train_df, y_test_df = train_test_split(dataset[['drug_name', 'cell_line_name']],
-                                                                        dataset[['pic50']],
-                                                                        test_size=SplitRatio.test_ratio.value,
-                                                                        random_state=random_state)
-
-        x_train_df, x_val_df, y_train_df, y_val_df = train_test_split(x_train_df,
-                                                                      y_train_df,
-                                                                      test_size=SplitRatio.validation_ratio.value,
-                                                                      random_state=random_state)
-        return x_train_df, x_val_df, x_test_df, y_train_df, y_val_df, y_test_df
-
     # def split_dataset(self, dataset, random_state):
     #     """ Splitting dataset as train, validation and test """
     #
-    #     tcga_label_list = ["ALL", "BLCA", "BRCA", "CESC", "DLBC", "LIHC", "LUAD",
-    #                        "ESCA", "GBM", "HNSC", "KIRC", "LAML", "LCML", "LGG",
-    #                        "LUSC", "MESO", "MM", "NB", "OV", "PAAD", "SCLC", "SKCM",
-    #                        "STAD", "THCA", 'COAD/READ']
+    #     x_train_df, x_test_df, y_train_df, y_test_df = train_test_split(dataset[['drug_name', 'cell_line_name']],
+    #                                                                     dataset[['pic50']],
+    #                                                                     test_size=SplitRatio.test_ratio.value,
+    #                                                                     random_state=random_state)
     #
-    #     dataset = dataset.query('cancer_type in @tcga_label_list')
-    #
-    #     # First split: separate out the test set
-    #     x_train_val, x_test, y_train_val, y_test = train_test_split(
-    #         dataset[['drug_name', 'cell_line_name', 'cancer_type']],
-    #         dataset[['pic50']],
-    #         test_size=SplitRatio.test_ratio.value,
-    #         stratify=dataset['cancer_type'],
-    #         random_state=random_state)
-    #
-    #     # Second split: separate out the training and validation sets
-    #     x_train, x_val, y_train, y_val = train_test_split(x_train_val, y_train_val,
-    #                                                       test_size=SplitRatio.validation_ratio.value / (
-    #                                                               1 - SplitRatio.test_ratio.value),
-    #                                                       stratify=x_train_val['cancer_type'],
-    #                                                       random_state=random_state)
-    #
-    #     x_train = x_train.drop(columns=['cancer_type'])
-    #     x_val = x_val.drop(columns=['cancer_type'])
-    #     x_test = x_test.drop(columns=['cancer_type'])
-    #
-    #     return x_train, x_val, x_test, y_train, y_val, y_test
+    #     x_train_df, x_val_df, y_train_df, y_val_df = train_test_split(x_train_df,
+    #                                                                   y_train_df,
+    #                                                                   test_size=SplitRatio.validation_ratio.value,
+    #                                                                   random_state=random_state)
+    #     return x_train_df, x_val_df, x_test_df, y_train_df, y_val_df, y_test_df
+
+    def split_dataset(self, dataset, random_state):
+        """ Splitting dataset as train, validation and test """
+
+        # First split: separate out the test set
+        x_train_val, x_test, y_train_val, y_test = train_test_split(
+            dataset[['drug_name', 'cell_line_name', 'cancer_type']],
+            dataset[['pic50']],
+            test_size=SplitRatio.test_ratio.value,
+            stratify=dataset['cancer_type'],
+            random_state=random_state)
+
+        # Second split: separate out the training and validation sets
+        x_train, x_val, y_train, y_val = train_test_split(x_train_val, y_train_val,
+                                                          test_size=SplitRatio.validation_ratio.value / (
+                                                                  1 - SplitRatio.test_ratio.value),
+                                                          stratify=x_train_val['cancer_type'],
+                                                          random_state=random_state)
+
+        x_train = x_train.drop(columns=['cancer_type'])
+        x_val = x_val.drop(columns=['cancer_type'])
+        x_test = x_test.drop(columns=['cancer_type'])
+
+        return x_train, x_val, x_test, y_train, y_val, y_test
 
     def prepare_dataset(self, dataset, split_type, batch_size, random_state):
         """
@@ -88,8 +81,8 @@ class RandomSplitDatasetStrategy(BaseDatasetStrategy):
         """
         dataset = dataset['dataset']
         mpnn_dataset, conv_dataset = self.create_mpnn_and_conv_dataset(dataset)
-        dataset = dataset[['drug_name', 'cell_line_name', 'pic50']]
-        # dataset = dataset[['drug_name', 'cell_line_name', 'pic50', 'cancer_type']]
+        # dataset = dataset[['drug_name', 'cell_line_name', 'pic50']]
+        dataset = dataset[['drug_name', 'cell_line_name', 'pic50', 'cancer_type']]
 
         # Splitting dataset into train, validation, and test
         x_train, x_val, x_test, y_train, y_val, y_test = self.split_dataset(dataset, random_state)
