@@ -40,24 +40,24 @@ class BaseModelCreationStrategy(ABC):
         """
         input_layer = keras.layers.Input(shape=(cell_line_dims[1], cell_line_dims[2], 1))
 
-        x = keras.layers.Conv2D(64, (1, 4), activation='relu')(input_layer)
+        x = keras.layers.Conv2D(64, (1, 2), activation='relu', padding='same')(input_layer)
         x = keras.layers.BatchNormalization()(x)
-        x = keras.layers.MaxPooling2D(pool_size=(2, 1))(x)
+        x = keras.layers.MaxPooling2D(pool_size=(1, 1))(x)
 
         # Convolutional Layer 2
-        x = keras.layers.Conv2D(128, (1, 4), activation='relu')(x)
+        x = keras.layers.Conv2D(128, (1, 2), activation='relu', padding='same')(x)
         x = keras.layers.BatchNormalization()(x)
-        x = keras.layers.MaxPooling2D(pool_size=(2, 1))(x)
+        x = keras.layers.MaxPooling2D(pool_size=(1, 1))(x)
 
         # Convolutional Layer 3
-        x = keras.layers.Conv2D(256, (1, 4), activation='relu')(x)
+        x = keras.layers.Conv2D(256, (1, 2), activation='relu', padding='same')(x)
         x = keras.layers.BatchNormalization()(x)
-        x = keras.layers.MaxPooling2D(pool_size=(2, 1))(x)
+        x = keras.layers.MaxPooling2D(pool_size=(1, 1))(x)
 
         # Convolutional Layer 4
-        x = keras.layers.Conv2D(512, (1, 4), activation='relu')(x)
+        x = keras.layers.Conv2D(512, (1, 2), activation='relu', padding='same')(x)
         x = keras.layers.BatchNormalization()(x)
-        x = keras.layers.MaxPooling2D(pool_size=(2, 1))(x)
+        x = keras.layers.MaxPooling2D(pool_size=(1, 1))(x)
 
         # Flatten layer
         x = keras.layers.Flatten()(x)
