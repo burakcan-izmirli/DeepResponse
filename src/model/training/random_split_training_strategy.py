@@ -11,7 +11,7 @@ from src.model.visualize_results import visualize_results
 class RandomSplitTrainingStrategy(BaseTrainingStrategy):
     """ Random split training strategy """
 
-    def train_and_evaluate_model(self, model_creation_strategy, dataset_tuple, batch_size, learning_rate, epoch):
+    def train_and_evaluate_model(self, model_creation_strategy, dataset_tuple, batch_size, learning_rate, epoch, comet):
         """ Train model and predict """
         dims, train_dataset, valid_dataset, test_dataset, y_test = dataset_tuple
         model = model_creation_strategy.create_model(*dims, batch_size)
@@ -28,5 +28,5 @@ class RandomSplitTrainingStrategy(BaseTrainingStrategy):
                   verbose=2)
 
         predictions = model.predict(test_dataset, verbose=2)
-        visualize_results(y_test.values, predictions)
+        visualize_results(y_test.values, predictions, comet)
         logging.info(evaluate_model(y_test.values, predictions))

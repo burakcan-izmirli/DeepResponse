@@ -16,7 +16,7 @@ class DeepResponse(StrategyCreator):
         """ Main function """
         logging.info("DeepResponse was started.")
 
-        self.get_comet_strategy().integrate_comet()
+        comet = self.get_comet_strategy().integrate_comet()
 
         set_seed(self.random_state)
 
@@ -29,7 +29,7 @@ class DeepResponse(StrategyCreator):
                                                             self.batch_size, self.random_state)
         model_creation_strategy = self.get_model_strategy()
         model_training_strategy.train_and_evaluate_model(model_creation_strategy, dataset_iterator, self.batch_size,
-                                                         self.learning_rate, self.epoch)
+                                                         self.learning_rate, self.epoch, comet)
 
 
 if __name__ == '__main__':

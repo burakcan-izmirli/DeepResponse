@@ -11,7 +11,8 @@ from src.model.visualize_results import visualize_results
 class StratifiedSplitTrainingStrategy(BaseTrainingStrategy):
     """ Random split training strategy """
 
-    def train_and_evaluate_model(self, model_creation_strategy, dataset_iterator, batch_size, learning_rate, epoch):
+    def train_and_evaluate_model(self, model_creation_strategy, dataset_iterator, batch_size, learning_rate, epoch,
+                                 comet):
         """ Train model and predict """
         for _ in dataset_iterator:
             dims, train_dataset, test_dataset, y_test = _
