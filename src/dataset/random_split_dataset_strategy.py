@@ -16,7 +16,6 @@ class RandomSplitDatasetStrategy(BaseDatasetStrategy):
 
         dataset_raw = pd.read_pickle(self.data_path)
 
-        dataset_raw = dataset_raw.head(5000)
         # Shuffling dataset
         dataset_raw = dataset_raw.sample(frac=1, random_state=random_state).reset_index(drop=True)
 

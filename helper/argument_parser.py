@@ -8,8 +8,8 @@ def argument_parser():
     """ Argument parser """
     parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
     parser.add_argument("-uc", "--use_comet", default=False, type=bool, help="Whether to use comet or not")
-    parser.add_argument("-ds", "--data_source", default='gdsc', type=str, help="['gdsc', 'ccle', 'nci_60']")
-    parser.add_argument("-es", "--evaluation_source", default=None, help="['gdsc', 'ccle', 'nci_60']")
+    parser.add_argument("-ds", "--data_source", default='DEPMAP', type=str, help="['DEPMAP', 'gdsc', 'ccle', 'nci_60']")
+    parser.add_argument("-es", "--evaluation_source", default=None, help="['DEPMAP', 'gdsc', 'ccle', 'nci_60']")
     parser.add_argument("-dt", "--data_type", default=DefaultArguments.data_type.value, type=str,
                         help="For all data sources: ['normal', 'l1000', 'l1000_cross_domain] "
                              "For just GDSC: ['pathway', 'pathway_reduced', 'digestive']")
