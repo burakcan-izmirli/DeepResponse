@@ -1,3 +1,4 @@
 /dataset/*/processed/*
 /dataset/*/raw/*
 /.idea/*
+**/__pycache__/
