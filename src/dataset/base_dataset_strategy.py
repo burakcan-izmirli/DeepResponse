@@ -78,7 +78,6 @@ class BaseDatasetStrategy(ABC):
         x_data = pd.DataFrame(x.astype('str'), columns=['drug_name', 'cell_line_name'])
         x_data = x_data.merge(mpnn).merge(conv)
         del mpnn, conv
-
         x_mpnn = convert_smiles_to_graph(x_data.smiles)
         x_conv = self.convert_conv_dataset(x_data.cell_line_features)
         del x_data

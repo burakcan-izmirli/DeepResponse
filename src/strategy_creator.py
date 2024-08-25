@@ -44,24 +44,24 @@ class StrategyCreator:
     def get_dataset_path_by_data_type(self):
         """ Get dataset path by data type """
         paths = {
-            DataType.normal.label: DataType.prefix.path + self.data_source.upper() + DataType.normal.path,
-            DataType.l1000.label: DataType.prefix.path + self.data_source.upper() + DataType.l1000.path,
-            DataType.l1000_cross_domain.label: DataType.prefix.path + self.data_source.upper() + DataType.l1000_cross_domain.path,
-            DataType.pathway.label: DataType.prefix.path + self.data_source.upper() + DataType.pathway.path,
-            DataType.pathway_reduced.label: DataType.prefix.path + self.data_source.upper() + DataType.pathway_reduced.path,
-            DataType.digestive.label: DataType.prefix.path + self.data_source.upper() + DataType.digestive.path
+            DataType.normal.label: DataType.prefix.path + self.data_source + DataType.normal.path,
+            DataType.l1000.label: DataType.prefix.path + self.data_source + DataType.l1000.path,
+            DataType.l1000_cross_domain.label: DataType.prefix.path + self.data_source + DataType.l1000_cross_domain.path,
+            DataType.pathway.label: DataType.prefix.path + self.data_source + DataType.pathway.path,
+            DataType.pathway_reduced.label: DataType.prefix.path + self.data_source + DataType.pathway_reduced.path,
+            DataType.digestive.label: DataType.prefix.path + self.data_source + DataType.digestive.path
         }
         return paths[self.data_type]
 
     def get_evaluation_dataset_path_by_data_type(self):
         """ Get evaluation dataset path by data type """
         paths = {
-            DataType.normal.label: DataType.prefix.path + self.evaluation_source.upper() + DataType.normal.path,
-            DataType.l1000.label: DataType.prefix.path + self.evaluation_source.upper() + DataType.l1000.path,
-            DataType.l1000_cross_domain.label: DataType.prefix.path + self.data_source.upper() + DataType.l1000_cross_domain.path,
-            DataType.pathway.label: DataType.prefix.path + self.evaluation_source.upper() + DataType.pathway.path,
-            DataType.pathway_reduced.label: DataType.prefix.path + self.evaluation_source.upper() + DataType.pathway_reduced.path,
-            DataType.digestive.label: DataType.prefix.path + self.evaluation_source.upper() + DataType.digestive.path
+            DataType.normal.label: DataType.prefix.path + self.evaluation_source + DataType.normal.path,
+            DataType.l1000.label: DataType.prefix.path + self.evaluation_source + DataType.l1000.path,
+            DataType.l1000_cross_domain.label: DataType.prefix.path + self.data_source + DataType.l1000_cross_domain.path,
+            DataType.pathway.label: DataType.prefix.path + self.evaluation_source + DataType.pathway.path,
+            DataType.pathway_reduced.label: DataType.prefix.path + self.evaluation_source + DataType.pathway_reduced.path,
+            DataType.digestive.label: DataType.prefix.path + self.evaluation_source + DataType.digestive.path
         }
         return paths[self.data_type]
 
