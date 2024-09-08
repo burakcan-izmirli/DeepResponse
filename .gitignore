@@ -2,3 +2,7 @@
 /dataset/*/raw/*
 /.idea/*
 **/__pycache__/
+dev.env
+nohup.out
+**.npy
+**.png
