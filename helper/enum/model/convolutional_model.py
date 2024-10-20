@@ -6,6 +6,6 @@ class ConvolutionalModel(Enum):
         self.filters = filters
         self.kernel_size = kernel_size
 
-    conv_1 = 1, (4, 1)
-    conv_2 = 1, (4, 1)
+    conv_1 = 64, (5, 1)
+    conv_2 = 128, (5, 1)
 

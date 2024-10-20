@@ -1,4 +1,5 @@
 """ Main file of deep response """
+from comet_ml import Experiment
 import logging
 import tensorflow as tf
 

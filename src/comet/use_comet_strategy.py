@@ -1,7 +1,7 @@
 """ Use comet strategy"""
+from comet_ml import Experiment
 import logging
 import os
-from comet_ml import Experiment
 from dotenv import load_dotenv
 
 from src.comet.base_comet_strategy import BaseCometStrategy

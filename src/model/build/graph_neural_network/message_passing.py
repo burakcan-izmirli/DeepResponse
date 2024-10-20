@@ -6,7 +6,6 @@ and extended based on the needs.
 import tensorflow as tf
 from src.model.build.graph_neural_network.edge_network import EdgeNetwork
 
-
 class MessagePassing(tf.keras.layers.Layer):
     """ Message passing """
 
@@ -48,3 +47,17 @@ class MessagePassing(tf.keras.layers.Layer):
                 atom_features_aggregated, atom_features_updated
             )
         return atom_features_updated
+
+    def get_config(self):
+        # Return the configuration for saving and loading the layer
+        config = super(MessagePassing, self).get_config()
+        config.update({
+            "units": self.units,
+            "steps": self.steps,
+        })
+        return config
+
+    @classmethod
+    def from_config(cls, config):
+        # Allows recreating the layer from its config
+        return cls(**config)
