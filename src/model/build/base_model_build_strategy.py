@@ -44,11 +44,11 @@ class BaseModelCreationStrategy(ABC):
         input_layer = keras.layers.Input(shape=(cell_line_dims[1], cell_line_dims[2], 1))
 
         # First convolutional layer with batch normalization
-        x = keras.layers.Conv2D(ConvolutionalModel.conv_1.filters, ConvolutionalModel.conv_1.kernel_size, activation='relu')(input_layer)
+        x = keras.layers.Conv2D(ConvolutionalModel.conv_1.filters, ConvolutionalModel.conv_1.kernel_size, activation=ConvolutionalModel.conv_1.activation)(input_layer)
         x = keras.layers.BatchNormalization()(x)
 
         # Second convolutional layer with batch normalization
-        x = keras.layers.Conv2D(ConvolutionalModel.conv_2.filters, ConvolutionalModel.conv_2.kernel_size, activation='relu')(x)
+        x = keras.layers.Conv2D(ConvolutionalModel.conv_2.filters, ConvolutionalModel.conv_2.kernel_size, activation=ConvolutionalModel.conv_2.activation)(x)
         x = keras.layers.BatchNormalization()(x)
 
         # Global average pooling
