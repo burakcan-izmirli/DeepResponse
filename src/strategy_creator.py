@@ -82,9 +82,18 @@ class StrategyCreator:
         }
         return strategies[self.split_type]
 
-    def get_model_strategy(self):
+    def get_model_creation_strategy(self):
         """ Get model strategy """
         strategies = {
-            'merged': MergedModelStrategy()
+            'classification': ClassificationModelCreationStrategy(),
+            'regression': RegressionModelCreationStrategy(),
         }
-        return strategies['merged']
+        return strategies[self.learning_task]
+    
+    def get_learning_task_strategy(self):
+        """ Get learning task strategy """
+        strategies = {
+            'classification': ClassificationLearningTaskStrategy(),
+            'regression': RegressionLearningTaskStrategy(),
+        }
+        return strategies[self.learning_task]
