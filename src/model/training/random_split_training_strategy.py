@@ -21,10 +21,11 @@ def r2_score(y_true, y_pred):
     ss_tot = tf.reduce_sum(tf.square(y_true - tf.reduce_mean(y_true)))
     return 1 - ss_res / (ss_tot + tf.keras.backend.epsilon())
 
-class RandomSplitTrainingStrategy(BaseTrainingStrategy):
-    """ Random split training strategy """
 
-    def train_and_evaluate_model(self, model_creation_strategy, dataset_tuple, batch_size, learning_rate, epoch, comet):
+class RandomSplitTrainingStrategy(BaseTrainingStrategy):
+    """Random split training strategy"""
+
+    def train_and_evaluate_model(self, model_creation_strategy, dataset_tuple, batch_size, learning_rate, epoch, comet, learning_task_strategy):
         """ Train model and predict """
         dims, train_dataset, valid_dataset, test_dataset, y_test = dataset_tuple
         
@@ -46,15 +47,11 @@ class RandomSplitTrainingStrategy(BaseTrainingStrategy):
         #     # If the model does not exist, create a new one
         #     model = model_creation_strategy.create_model(*dims, batch_size)
        
+        # Create a new model using the model creation strategy
         model = model_creation_strategy.create_model(*dims, batch_size)    
         
-        # Compile the model using Huber loss and tracking MSE as a metric
-        model.compile(loss=keras.losses.Huber(),  
-                      optimizer=keras.optimizers.Adam(),
-                      metrics=[keras.metrics.MeanSquaredError(name='mse'),  
-                               keras.metrics.RootMeanSquaredError(name='rmse'),
-                               keras.metrics.MeanAbsoluteError(name='mae'),
-                               r2_score])  # Custom R2 metric
+        # Compile the model using the task-specific strategy
+        model = learning_task_strategy.compile_model(model, learning_rate)
 
         # Reduce learning rate on plateau
         reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=10, min_lr=0.00001, verbose=1)
