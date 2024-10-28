@@ -92,7 +92,7 @@ class RandomSplitTrainingStrategy(BaseTrainingStrategy):
             comet.log_metric("r2_score_test", test_r2)
 
         # Visualize the results
-        visualize_results(y_test.values, predictions, comet)
+        learning_task_strategy.visualize_results(y_test.values, predictions, comet)
         
         # Log evaluation metrics
-        logging.info(evaluate_model(y_test.values, predictions))
+        logging.info(learning_task_strategy.evaluate_model(y_test.values, predictions))
