@@ -6,6 +6,6 @@ class BaseTrainingStrategy(ABC):
     """ Base training strategy """
 
     @abstractmethod
-    def train_and_evaluate_model(self, model_creation_strategy, dataset_tuple, batch_size, learning_rate, epoch, comet):
+    def train_and_evaluate_model(self, model_creation_strategy, dataset_tuple, batch_size, learning_rate, epoch, comet, learning_task_strategy):
         """ Train and evaluate model """
         pass

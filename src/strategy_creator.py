@@ -93,7 +93,7 @@ class StrategyCreator:
             'regression': RegressionModelCreationStrategy(),
         }
         return strategies[self.learning_task]
-    
+        
     def get_learning_task_strategy(self):
         """ Get learning task strategy """
         strategies = {

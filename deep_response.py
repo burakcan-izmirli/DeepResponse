@@ -34,7 +34,7 @@ class DeepResponse(StrategyCreator):
         model_creation_strategy = self.get_model_creation_strategy()
 
         model_training_strategy.train_and_evaluate_model(
-            model_creation_strategy, dataset_iterator, self.batch_size, 
+            model_creation_strategy, dataset_iterator, self.batch_size,
             self.learning_rate, self.epoch, comet, learning_task_strategy
         )
 

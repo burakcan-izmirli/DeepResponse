@@ -17,7 +17,7 @@ class RegressionLearningTaskStrategy(BaseLearningTaskStrategy):
             keras.metrics.MeanSquaredError(name='mse'),
             keras.metrics.RootMeanSquaredError(name='rmse'),
             keras.metrics.MeanAbsoluteError(name='mae'),
-            self.r2_score_tf 
+            self.r2_score_tf
         ]
 
     def process_targets(self, y):
