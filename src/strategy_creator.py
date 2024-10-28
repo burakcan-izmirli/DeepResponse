@@ -11,17 +11,20 @@ from src.dataset.drug_stratified_dataset_strategy import DrugStratifiedDatasetSt
 from src.dataset.drug_cell_stratified_dataset_strategy import DrugCellStratifiedDatasetStrategy
 from src.dataset.cross_domain_dataset_strategy import CrossDomainDatasetStrategy
 
-from src.model.build.merged_model_build_strategy import MergedModelStrategy
-
 from src.model.training.stratified_split_model_training_strategy import StratifiedSplitTrainingStrategy
 from src.model.training.random_split_training_strategy import RandomSplitTrainingStrategy
 
+from src.model.build.classification_model_build_strategy import ClassificationModelCreationStrategy
+from src.model.build.regression_model_build_strategy import RegressionModelCreationStrategy
+
+from src.model.learning_task.classification_learning_task_strategy import ClassificationLearningTaskStrategy
+from src.model.learning_task.regression_learning_task_strategy import RegressionLearningTaskStrategy
 
 class StrategyCreator:
     """ Strategy creator """
 
     def __init__(self, use_comet, data_source, evaluation_source, data_type, split_type, random_state, batch_size,
-                 epoch, learning_rate):
+                 epoch, learning_rate, learning_task):
         self.use_comet = use_comet
         self.data_source = data_source
         self.evaluation_source = evaluation_source
@@ -31,6 +34,7 @@ class StrategyCreator:
         self.batch_size = batch_size
         self.epoch = epoch
         self.learning_rate = learning_rate
+        self.learning_task = learning_task
         logging.basicConfig(level=logging.INFO)
 
     def get_comet_strategy(self):
