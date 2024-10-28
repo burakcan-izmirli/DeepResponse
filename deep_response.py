@@ -25,12 +25,18 @@ class DeepResponse(StrategyCreator):
         dataset_strategy = split_strategy['dataset']
         model_training_strategy = split_strategy['training']
 
+        learning_task_strategy = self.get_learning_task_strategy()
         raw_dataset = dataset_strategy.read_and_shuffle_dataset(self.random_state)
-        dataset_iterator = dataset_strategy.prepare_dataset(raw_dataset, self.split_type,
-                                                            self.batch_size, self.random_state)
-        model_creation_strategy = self.get_model_strategy()
-        model_training_strategy.train_and_evaluate_model(model_creation_strategy, dataset_iterator, self.batch_size,
-                                                         self.learning_rate, self.epoch, comet)
+        dataset_iterator = dataset_strategy.prepare_dataset(
+            raw_dataset, self.split_type, self.batch_size, self.random_state, learning_task_strategy
+        )
+
+        model_creation_strategy = self.get_model_creation_strategy()
+
+        model_training_strategy.train_and_evaluate_model(
+            model_creation_strategy, dataset_iterator, self.batch_size,
+            self.learning_rate, self.epoch, comet, learning_task_strategy
+        )
 
 
 if __name__ == '__main__':

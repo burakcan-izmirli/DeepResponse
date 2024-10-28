@@ -44,34 +44,54 @@ class BaseModelCreationStrategy(ABC):
         input_layer = keras.layers.Input(shape=(cell_line_dims[1], cell_line_dims[2], 1))
 
         # First convolutional layer with batch normalization
-        x = keras.layers.Conv2D(ConvolutionalModel.conv_1.filters, ConvolutionalModel.conv_1.kernel_size, activation=ConvolutionalModel.conv_1.activation)(input_layer)
+        x = keras.layers.Conv2D(ConvolutionalModel.conv_1.filters, ConvolutionalModel.conv_1.kernel_size)(input_layer)
         x = keras.layers.BatchNormalization()(x)
+        x = keras.layers.Activation(ConvolutionalModel.conv_1.activation)(x)
 
         # Second convolutional layer with batch normalization
-        x = keras.layers.Conv2D(ConvolutionalModel.conv_2.filters, ConvolutionalModel.conv_2.kernel_size, activation=ConvolutionalModel.conv_2.activation)(x)
+        x = keras.layers.Conv2D(ConvolutionalModel.conv_2.filters, ConvolutionalModel.conv_2.kernel_size)(x)
         x = keras.layers.BatchNormalization()(x)
+        x = keras.layers.Activation(ConvolutionalModel.conv_2.activation)(x)
 
         # Global average pooling
         x = keras.layers.GlobalAveragePooling2D()(x)
 
         return input_layer, x
 
-    def create_mlp_model(self, dense_units, concat):
-        """
-        Create MLP model with batch normalization and dropout after each dense layer,
-        using MLPModelDense and MLPModelDropout enums.
-        """
-        # First dense layer with batch normalization and dropout
-        x = keras.layers.Dense(dense_units, activation=MLPModelDense.dense_1.activation)(concat)
-        x = keras.layers.BatchNormalization()(x)
-        # x = keras.layers.Dropout(MLPModelDropout.dropout_1.rate)(x)
+    def create_model(self, atom_dims, bond_dims, cell_line_dims, batch_size=32, message_units=128,
+                        message_steps=5,
+                        num_attention_heads=8,
+                        dense_units=1024):
+            """
+            Create merged model
+            :param atom_dims: Atom dimensions
+            :param bond_dims: Bond dimensions
+            :param cell_line_dims: Cell line dimensions
+            :param batch_size: Batch size
+            :param message_units: Message units
+            :param message_steps: Message steps
+            :param num_attention_heads: Number of attention heads
+            :param dense_units: Dense units
+            :return: Merged model
+            """
+            atom_features, bond_features, pair_indices, molecule_indicator, mpnn = \
+                self.create_graph_neural_network(atom_dims,
+                                                bond_dims,
+                                                message_units,
+                                                message_steps,
+                                                num_attention_heads,
+                                                dense_units,
+                                                batch_size)
+            cell_line_features, conv = self.create_conv_model(cell_line_dims)
 
-        # Second dense layer with batch normalization and dropout
-        x = keras.layers.Dense(MLPModelDense.dense_2.units, activation=MLPModelDense.dense_2.activation)(x)
-        x = keras.layers.BatchNormalization()(x)
-        # x = keras.layers.Dropout(MLPModelDropout.dropout_2.rate)(x)
+            concat = keras.layers.concatenate([conv, mpnn], name='concat')
 
-        # Final output layer
-        x = keras.layers.Dense(MLPModelDense.dense_3.units)(x)
+            mlp = self.create_mlp_model(dense_units, concat)
 
-        return x
+            model_func = keras.Model(inputs=[cell_line_features, atom_features, bond_features, pair_indices,
+                                            molecule_indicator],
+                                    outputs=[mlp],
+                                    name='final_output')
+
+            return model_func
+

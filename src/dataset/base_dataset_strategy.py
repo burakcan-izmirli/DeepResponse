@@ -1,4 +1,5 @@
-""" Base dataset strategy """
+""" Base Dataset Strategy """
+
 import logging
 import pandas as pd
 import numpy as np
@@ -9,7 +10,7 @@ from src.model.build.graph_neural_network.mpnn import convert_smiles_to_graph, p
 
 
 class BaseDatasetStrategy(ABC):
-    """ Base dataset src """
+    """ Base dataset strategy """
 
     def __init__(self, data_path, evaluation_data_path=None):
         self.data_path = data_path
@@ -26,7 +27,7 @@ class BaseDatasetStrategy(ABC):
         pass
 
     @abstractmethod
-    def prepare_dataset(self, dataset, split_type, batch_size, random_state):
+    def prepare_dataset(self, dataset, split_type, batch_size, random_state, learning_task_strategy):
         """ Prepare dataset """
         pass
 
@@ -46,21 +47,13 @@ class BaseDatasetStrategy(ABC):
 
     @staticmethod
     def convert_conv_dataset(data):
-        """
-        Convert conv dataset to optimized format
-        :param data: Raw conv dataset
-        :return: Converted dataset
-        """
+        """ Convert conv dataset to optimized format """
         logging.info("Convert conv dataset is started.")
-        last_list = []
-        for row in data:
-            last_list.append(row)
+        return np.array([row for row in data])
 
-        return np.array(last_list)
-
-    def tf_dataset_creator(self, x, y, batch_size, mpnn, conv):
+    def tf_dataset_creator(self, x, y, batch_size, mpnn, conv, learning_task_strategy):
         """
-        Create a batched and prefetched TensorFlow dataset.
+        Create a batched and prefetched TensorFlow dataset, applying the learning task strategy as needed.
 
         Parameters:
         - x: Independent variables
@@ -68,6 +61,7 @@ class BaseDatasetStrategy(ABC):
         - batch_size: Batch size
         - mpnn: MPNN dataset
         - conv: Conv dataset
+        - learning_task_strategy: Strategy to process targets for specific learning tasks
 
         Returns:
         - atom_dim: Dimension of atom features
@@ -81,7 +75,9 @@ class BaseDatasetStrategy(ABC):
         x_mpnn = convert_smiles_to_graph(x_data.smiles)
         x_conv = self.convert_conv_dataset(x_data.cell_line_features)
         del x_data
-        batched_dataset = tf.data.Dataset.from_tensor_slices((x_conv, x_mpnn, (y.pic50))). \
+        
+        y = learning_task_strategy.process_targets(y)
+        batched_dataset = tf.data.Dataset.from_tensor_slices((x_conv, x_mpnn, y)). \
             batch(batch_size).map(prepare_batch, num_parallel_calls=-1).prefetch(tf.data.AUTOTUNE)
 
         return x_mpnn[0][0][0].shape[0], x_mpnn[1][0][0].shape[0], x_conv.shape, batched_dataset

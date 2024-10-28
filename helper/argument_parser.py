@@ -8,7 +8,8 @@ def argument_parser():
     """ Argument parser """
     parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
     parser.add_argument("-uc", "--use_comet", default=False, type=bool, help="Whether to use comet or not")
-    parser.add_argument("-ds", "--data_source", default='depmap', type=str, help="['depmap', 'gdsc', 'ccle', 'nci_60']")
+    parser.add_argument('-lt', "--learning_task", default=DefaultArguments.learning_task.value, type=str, help="['classification', 'regression']")
+    parser.add_argument("-ds", "--data_source", default=DefaultArguments.data_source.value, type=str, help="['depmap', 'gdsc', 'ccle', 'nci_60']")
     parser.add_argument("-es", "--evaluation_source", default=None, help="['depmap', 'gdsc', 'ccle', 'nci_60']")
     parser.add_argument("-dt", "--data_type", default=DefaultArguments.data_type.value, type=str,
                         help="For all data sources: ['normal', 'l1000', 'l1000_cross_domain] "
@@ -29,4 +30,4 @@ def argument_parser():
         args["evaluation_source"] = args["data_source"]
 
     return args["use_comet"], args["data_source"], args["evaluation_source"], args["data_type"], args["split_type"], \
-        args["random_state"], args["batch_size"], args["epoch"], args["learning_rate"]
+        args["random_state"], args["batch_size"], args["epoch"], args["learning_rate"], args["learning_task"]

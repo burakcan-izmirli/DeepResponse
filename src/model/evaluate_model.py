@@ -5,7 +5,7 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, p
 from sklearn.preprocessing import Binarizer
 from scipy.stats import pearsonr, spearmanr
 
-from helper.enum.model.binary_threshold import BinaryThreshold
+from helper.enum.dataset.binary_threshold import BinaryThreshold
 
 
 def binarize_data(data, threshold=BinaryThreshold.threshold.value):
