@@ -1,9 +1,13 @@
-from strategies.learning_task.base_learning_task_strategy import BaseLearningTaskStrategy
+""" Classification Learning Task Strategy """
+
 from tensorflow import keras
 import tensorflow as tf
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 import matplotlib.pyplot as plt
 from sklearn.metrics import roc_curve, auc
+
+from helper.enum.dataset.binary_threshold import BinaryThreshold
+from src.model.learning_task.base_learning_task_strategy import BaseLearningTaskStrategy
 
 class ClassificationLearningTaskStrategy(BaseLearningTaskStrategy):
     """ Classification learning task strategy """
@@ -18,6 +22,10 @@ class ClassificationLearningTaskStrategy(BaseLearningTaskStrategy):
             keras.metrics.Recall(name='recall'),
             keras.metrics.AUC(name='auc')
         ]
+
+    def process_targets(self, y):
+        """ Binarizes targets based on BinaryThreshold """
+        return (y['pic50'] >= BinaryThreshold.threshold.value).astype(int)
 
     def compile_model(self, model, learning_rate):
         loss_function = self.get_loss_function()

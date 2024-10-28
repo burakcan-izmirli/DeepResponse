@@ -2,7 +2,7 @@
 from tensorflow import keras
 
 from src.model.build.base_model_build_strategy import BaseModelCreationStrategy
-
+from helper.enum.model.mlp_model import MLPModelDense
 
 class ClassificationModelCreationStrategy(BaseModelCreationStrategy):
     """ Classification model strategy """

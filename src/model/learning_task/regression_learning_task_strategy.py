@@ -1,11 +1,13 @@
-from strategies.learning_task.base_learning_task_strategy import BaseLearningTaskStrategy
+""" Regression Learning Task Strategy """
 from tensorflow import keras
 import tensorflow as tf
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import matplotlib.pyplot as plt
 
+from src.model.learning_task.base_learning_task_strategy import BaseLearningTaskStrategy
+
 class RegressionLearningTaskStrategy(BaseLearningTaskStrategy):
-    """Strategy for regression learning tasks."""
+    """ Strategy for regression learning tasks. """
 
     def get_loss_function(self):
         return keras.losses.Huber()
@@ -17,6 +19,17 @@ class RegressionLearningTaskStrategy(BaseLearningTaskStrategy):
             keras.metrics.MeanAbsoluteError(name='mae'),
             self.r2_score_tf 
         ]
+
+    def process_targets(self, y):
+        """ Pass-through for regression targets, returns pic50 values unchanged. """
+        return y['pic50']
+
+    def compile_model(self, model, learning_rate):
+        loss_function = self.get_loss_function()
+        metrics = self.get_metrics()
+        model.compile(optimizer=tf.optimizers.Adam(learning_rate=learning_rate),
+                      loss=loss_function, metrics=metrics)
+        return model
 
     def r2_score_tf(self, y_true, y_pred):
         ss_res = tf.reduce_sum(tf.square(y_true - y_pred))
