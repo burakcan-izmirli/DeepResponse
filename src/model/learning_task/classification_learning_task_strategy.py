@@ -2,7 +2,6 @@
 
 import logging
 import pandas as pd
-import numpy as np
 import tensorflow as tf
 from sklearn.metrics import roc_auc_score, f1_score, accuracy_score, precision_score, recall_score
 

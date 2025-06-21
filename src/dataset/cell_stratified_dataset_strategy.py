@@ -4,7 +4,6 @@ import pandas as pd
 import numpy as np
 import concurrent.futures
 import logging
-import tensorflow as tf
 from sklearn.model_selection import GroupKFold, train_test_split
 
 from helper.enum.dataset.n_split import NSplit
