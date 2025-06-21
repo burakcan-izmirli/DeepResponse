@@ -23,9 +23,9 @@ def argument_parser():
 
     # Logging and monitoring
     parser.add_argument("-uc", "--use_comet", default=DefaultArguments.comet.value,
-                        type=lambda x: (str(x).lower() == 'true'), 
+                        type=lambda x: (str(x).lower() == 'true'),
                         help="Whether to use Comet ML for experiment tracking")
-    
+
     # Task configuration
     parser.add_argument('-lt', "--learning_task", default=DefaultArguments.learning_task.value,
                         type=str, choices=['classification', 'regression'],

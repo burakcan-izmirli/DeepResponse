@@ -5,9 +5,8 @@ This module provides centralized configuration validation and management
 for all DeepResponse components.
 """
 import logging
-from typing import Dict, List, Optional, Any
+from typing import Dict, Optional, Any
 from dataclasses import dataclass
-from pathlib import Path
 
 
 @dataclass
@@ -24,7 +23,6 @@ class DeepResponseConfig:
     evaluation_source: Optional[str]
     data_type: str
     split_type: str
-    
     # Training parameters
     learning_rate: float
     batch_size: int
@@ -191,7 +189,6 @@ class ConfigurationManager:
         Raises:
             FileNotFoundError: If required datasets are missing
         """
-        from helper.enum.dataset.data_type import DataType
         import os
         
         # Build the main dataset path
@@ -235,7 +232,7 @@ class ConfigurationManager:
             
             if missing_files:
                 raise FileNotFoundError(f"Missing evaluation dataset files: {missing_files}")
-        
+            
         logging.info(f"✓ Dataset validation passed: {config.data_source}/{config.data_type}")
         if config.evaluation_source:
             logging.info(f"✓ Evaluation dataset validated: {config.evaluation_source}/{config.data_type}")

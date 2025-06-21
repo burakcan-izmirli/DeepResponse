@@ -100,7 +100,6 @@ class StrategyCreator:
 
         return DataType.prefix.path + self.data_source + relative_path
 
-
     def get_evaluation_dataset_path_by_data_type(self):
         """
         Get the evaluation dataset path for cross-domain scenarios.

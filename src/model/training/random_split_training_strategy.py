@@ -35,7 +35,7 @@ class RandomSplitTrainingStrategy(BaseTrainingStrategy):
             callbacks = self._get_callbacks(checkpoint_path, comet_logger)
 
             logging.info(f"Starting training for {strategy_creator.epoch} epochs...")
-            history = model.fit(
+            model.fit(
                 train_dataset,
                 epochs=strategy_creator.epoch,
                 validation_data=valid_dataset,

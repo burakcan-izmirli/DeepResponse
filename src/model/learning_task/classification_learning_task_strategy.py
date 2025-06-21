@@ -39,7 +39,7 @@ class ClassificationLearningTaskStrategy(BaseLearningTaskStrategy):
         try:
             if learning_rate <= 0:
                 raise ValueError(f"Learning rate must be positive, got: {learning_rate}")
-            
+
             optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
             model.compile(
                 optimizer=optimizer,
