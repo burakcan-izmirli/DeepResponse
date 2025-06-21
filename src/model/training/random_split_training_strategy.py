@@ -7,38 +7,61 @@ from src.model.training.base_training_strategy import BaseTrainingStrategy
 
 class RandomSplitTrainingStrategy(BaseTrainingStrategy):
     def train_and_evaluate_model(self, strategy_creator, dataset_input, comet_logger):
-        learning_task_strategy = strategy_creator.get_learning_task_strategy()
-        model_creation_strategy = strategy_creator.get_model_creation_strategy()
+        """
+        Train and evaluate model using random split strategy.
+        
+        Args:
+            strategy_creator: Strategy creator instance
+            dataset_input: Tuple containing (dims, train_dataset, valid_dataset, test_dataset, y_test_df)
+            comet_logger: Comet ML logger instance
+        """
+        try:
+            learning_task_strategy = strategy_creator.get_learning_task_strategy()
+            model_creation_strategy = strategy_creator.get_model_creation_strategy()
 
-        dims, train_dataset, valid_dataset, test_dataset, y_test_df = dataset_input
-        drug_smiles_input_shape, cell_input_shape = dims
+            dims, train_dataset, valid_dataset, test_dataset, y_test_df = dataset_input
+            drug_smiles_input_shape, cell_input_shape = dims
 
-        model = model_creation_strategy.create_model(
-            drug_input_shape=drug_smiles_input_shape,
-            cell_input_shape=cell_input_shape,
-            selformer_trainable_layers=strategy_creator.selformer_trainable_layers
-        )
+            logging.info("Creating model...")
+            model = model_creation_strategy.create_model(
+                drug_input_shape=drug_smiles_input_shape,
+                cell_input_shape=cell_input_shape,
+                selformer_trainable_layers=strategy_creator.selformer_trainable_layers
+            )
 
-        learning_task_strategy.compile_model(model, strategy_creator.learning_rate)
+            learning_task_strategy.compile_model(model, strategy_creator.learning_rate)
 
-        checkpoint_path = self._get_checkpoint_path(strategy_creator)
-        callbacks = self._get_callbacks(checkpoint_path, comet_logger)
+            checkpoint_path = self._get_checkpoint_path(strategy_creator)
+            callbacks = self._get_callbacks(checkpoint_path, comet_logger)
 
-        logging.info("Starting training...")
-        model.fit(
-            train_dataset,
-            epochs=strategy_creator.epoch,
-            validation_data=valid_dataset,
-            callbacks=callbacks,
-            verbose=2
-        )
+            logging.info(f"Starting training for {strategy_creator.epoch} epochs...")
+            history = model.fit(
+                train_dataset,
+                epochs=strategy_creator.epoch,
+                validation_data=valid_dataset,
+                callbacks=callbacks,
+                verbose=2
+            )
 
-        logging.info("Loading best model for evaluation...")
-        model.load_weights(checkpoint_path)
+            # Verify checkpoint exists before loading
+            if not os.path.exists(checkpoint_path):
+                logging.warning(f"Checkpoint not found at {checkpoint_path}. Using current model weights.")
+            else:
+                logging.info("Loading best model for evaluation...")
+                model.load_weights(checkpoint_path)
 
-        logging.info("Evaluating model on the test set...")
-        y_pred = model.predict(test_dataset, verbose=0)
-        learning_task_strategy.evaluate_model(y_test_df, y_pred, comet_logger)
+            logging.info("Evaluating model on the test set...")
+            y_pred = model.predict(test_dataset, verbose=0)
+            learning_task_strategy.evaluate_model(y_test_df, y_pred, comet_logger)
+            
+            logging.info("Training and evaluation completed successfully.")
+            
+        except Exception as e:
+            logging.error(f"Error during training: {e}")
+            raise
+        finally:
+            # Clean up TensorFlow session
+            tf.keras.backend.clear_session()
 
     def _get_callbacks(self, checkpoint_path, comet_experiment):
         callbacks = [
