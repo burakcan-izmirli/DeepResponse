@@ -1,89 +1,112 @@
 """ Drug cell stratified dataset strategy """
-import math
-import numpy as np
+import logging
 import pandas as pd
+import numpy as np
 import concurrent.futures
+import tensorflow as tf
+from sklearn.model_selection import GroupKFold, train_test_split
 
 from helper.enum.dataset.n_split import NSplit
-
+from helper.enum.dataset.split_ratio import SplitRatio
 from src.dataset.base_dataset_strategy import BaseDatasetStrategy
-
 
 class DrugCellStratifiedDatasetStrategy(BaseDatasetStrategy):
     """ Drug cell stratified dataset strategy """
 
     def read_and_shuffle_dataset(self, random_state):
         """ Read and shuffle dataset """
+        logging.info("Reading and shuffling dataset for drug-cell-stratified split...")
+        try:
+            dataset_raw = pd.read_pickle(self.data_path)
+        except FileNotFoundError:
+            logging.error(f"Dataset file not found at: {self.data_path}")
+            raise
 
-        dataset_raw = pd.read_pickle(self.data_path)
-        # Shuffling dataset
         dataset_raw = dataset_raw.sample(frac=1, random_state=random_state).reset_index(drop=True)
+        logging.info(f"Dataset loaded with {len(dataset_raw)} samples.")
+        return {'dataset': dataset_raw, 'evaluation_dataset': None}
 
-        evaluation_dataset_raw = None
+    def create_splitter(self, dataset):
+        """ Creates a GroupKFold splitter based on drug-cell pairs """
+        n_splits = NSplit.stratified.value
+        logging.info(f"Creating GroupKFold splitter with {n_splits} folds, grouped by drug_name and cell_line_name.")
+        dataset['drug_cell_group'] = dataset['drug_name'] + "_" + dataset['cell_line_name']
+        return GroupKFold(n_splits=n_splits)
 
-        return {'dataset': dataset_raw, 'evaluation_dataset': evaluation_dataset_raw}
+    def split_dataset(self, train_val_df, random_state):
+        """ Splits a fold's training data into training and validation sets randomly """
+        n_splits = NSplit.stratified.value
+        train_ratio = (n_splits - 1) / n_splits if n_splits > 1 else 1
+        relative_val_size = SplitRatio.validation_ratio.value / train_ratio
 
-    def create_splitter(self, dataset, random_state):
-        """ Create splitter """
+        X = train_val_df[['drug_name', 'cell_line_name']]
+        y = train_val_df[['pic50']]
 
-        grouped_by_drug_df = dataset.drop_duplicates(subset=['drug_name'], keep='first')
-        grouped_by_drug_df = grouped_by_drug_df[['drug_name']]
-        grouped_by_drug_df['drug_group'] = np.divmod(np.arange(len(grouped_by_drug_df)),
-                                                     math.ceil(len(grouped_by_drug_df)) /
-                                                     NSplit.stratified.value)[0] + 1
-        grouped_by_drug_df['drug_group'] = grouped_by_drug_df['drug_group'].astype('int')
+        if len(train_val_df) < 2:
+            return X, pd.DataFrame(columns=X.columns), y, pd.DataFrame(columns=y.columns)
 
-        grouped_by_cell_df = dataset.drop_duplicates(subset=['cell_line_name'], keep='first')
-        grouped_by_cell_df = grouped_by_cell_df[['cell_line_name']]
-        grouped_by_cell_df['cell_group'] = np.divmod(np.arange(len(grouped_by_cell_df)),
-                                                     math.ceil(len(grouped_by_cell_df)) /
-                                                     NSplit.stratified.value)[0] + 1
-        grouped_by_cell_df['cell_group'] = grouped_by_cell_df['cell_group'].astype('int')
+        x_train, x_val, y_train, y_val = train_test_split(
+            X, y, test_size=relative_val_size, random_state=random_state
+        )
+        logging.info(f"Fold split sizes: Train={len(x_train)}, Val={len(x_val)}")
+        return x_train, x_val, y_train, y_val
 
-        dataset = dataset.merge(grouped_by_drug_df, how='left').merge(grouped_by_cell_df, how='left'). \
-            sort_values(['drug_group', 'cell_group']).reset_index(drop=True)
-
-        for group in range(1, NSplit.stratified.value + 1):
-            train_df = dataset.query('drug_group!=@group & cell_group!=@group')
-            test_df = dataset.query('drug_group==@group | cell_group==@group')
-            yield train_df, test_df
-
-    def split_dataset(self, dataset, *args, **kwargs):
-        """ Split dataset """
-        return dataset[['drug_name', 'cell_line_name']], dataset[['pic50']]
-
-    def prepare_dataset(self, dataset, split_type, batch_size, random_state):
+    def prepare_dataset(self, dataset_dict, split_type, batch_size, random_state, learning_task_strategy):
         """
-        Main function for preparing dataset
-        :param dataset: Dataset
-        :param split_type: Split type [random, cell_stratified, drug_stratified, cell_drug_stratified]
-        :param batch_size: Batch size
-        :param random_state: Random state
-        :return: atom_dim, bond_dim, train_dataset, valid_dataset, test_dataset
+        Prepare dataset iterator for stratified cross-validation.
+        Yields ((smiles_shape, cell_line_shape), train_dataset, val_dataset, test_dataset, y_test_fold_actual) for each fold.
         """
-        dataset = dataset['dataset']
+        dataset_df = dataset_dict['dataset']
+        drug_smiles_lookup, cell_features_lookup = self.create_drug_and_conv_dataset(dataset_df)
 
-        mpnn_dataset, conv_dataset = self.create_mpnn_and_conv_dataset(dataset)
+        required_cols = ['drug_name', 'cell_line_name', 'pic50']
+        if not all(col in dataset_df.columns for col in required_cols):
+            raise ValueError(f"Dataset is missing one of the required columns: {required_cols}")
 
-        dataset = dataset[['drug_name', 'cell_line_name', 'pic50']]
-        splitter = self.create_splitter(dataset, random_state)
+        X = dataset_df[required_cols].copy()
+        splitter = self.create_splitter(X)
+        groups = X['drug_cell_group']
 
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            # Creating Tensorflow datasets in parallel for each train-test split
-            futures = []
+        fold_count = 0
+        for fold_idx, (train_idx, test_idx) in enumerate(splitter.split(X, groups=groups)):
+            fold_count += 1
+            logging.info(f"----- Preparing CV Fold {fold_count} -----")
 
-            for train_df, test_df in splitter:
-                train_args = tuple(self.split_dataset(train_df)) + (batch_size, mpnn_dataset, conv_dataset)
-                test_args = tuple(self.split_dataset(test_df)) + (batch_size, mpnn_dataset, conv_dataset)
+            train_val_df = X.iloc[train_idx]
+            x_test = X.iloc[test_idx][['drug_name', 'cell_line_name']]
+            y_test = X.iloc[test_idx][['pic50']]
 
-                futures.append(executor.submit(self.tf_dataset_creator, *train_args))
-                futures.append(executor.submit(self.tf_dataset_creator, *test_args))
+            x_train, x_val, y_train, y_val = self.split_dataset(train_val_df, random_state)
 
-            results = [future.result() for future in futures]
+            y_train = learning_task_strategy.process_targets(y_train)
+            y_val = learning_task_strategy.process_targets(y_val)
+            y_test = learning_task_strategy.process_targets(y_test)
 
-        # Unpack the results for the first train-test split
-        atom_dim, bond_dim, cell_line_dim = results[0][:3]
-        train_dataset, test_dataset = [result[3] for result in results]
+            train_args = (x_train, y_train, batch_size, cell_features_lookup, drug_smiles_lookup, learning_task_strategy, True)
+            val_args = (x_val, y_val, batch_size, cell_features_lookup, drug_smiles_lookup, learning_task_strategy, False)
+            test_args = (x_test, y_test, batch_size, cell_features_lookup, drug_smiles_lookup, learning_task_strategy, False)
 
-        yield (atom_dim, bond_dim, cell_line_dim), train_dataset, test_dataset, results[1][-1]
+            with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+                future_train = executor.submit(self.tf_dataset_creator, *train_args)
+                future_val = executor.submit(self.tf_dataset_creator, *val_args)
+                future_test = executor.submit(self.tf_dataset_creator, *test_args)
 
+                drug_shape_train, cell_shape_train, train_tf_dataset = future_train.result()
+                _, _, val_tf_dataset = future_val.result() # Shapes should be consistent
+                _, _, test_tf_dataset = future_test.result() # Shapes should be consistent
+
+            train_cardinality = tf.data.experimental.cardinality(train_tf_dataset).numpy()
+            val_cardinality = tf.data.experimental.cardinality(val_tf_dataset).numpy()
+            test_cardinality = tf.data.experimental.cardinality(test_tf_dataset).numpy()
+
+            if train_cardinality == 0 or val_cardinality == 0 or test_cardinality == 0 :
+                logging.warning(f"Skipping Fold {fold_count} due to empty TF dataset created (TrainB: {train_cardinality}, ValB: {val_cardinality}, TestB: {test_cardinality}).")
+                continue
+
+            prefetch_buffer_size = tf.data.AUTOTUNE
+            train_tf_dataset = train_tf_dataset.prefetch(prefetch_buffer_size)
+            val_tf_dataset = val_tf_dataset.prefetch(prefetch_buffer_size)
+            test_tf_dataset = test_tf_dataset.prefetch(prefetch_buffer_size)
+
+            logging.info(f"Fold {fold_count}: Prepared Train TF ({train_cardinality}b), Val TF ({val_cardinality}b), Test TF ({test_cardinality}b).")
+            yield (drug_shape_train, cell_shape_train), train_tf_dataset, val_tf_dataset, test_tf_dataset, y_test
