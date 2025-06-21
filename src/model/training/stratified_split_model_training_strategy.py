@@ -13,7 +13,6 @@ class StratifiedSplitTrainingStrategy(BaseTrainingStrategy):
 
         all_fold_results = []
         best_overall_val_loss = float('inf')
-        best_model_path = None
 
         for fold_idx, data_fold in enumerate(dataset_iterator):
             logging.info(f"\n----- Starting CV Fold {fold_idx + 1} -----")
@@ -49,7 +48,6 @@ class StratifiedSplitTrainingStrategy(BaseTrainingStrategy):
             current_val_loss = min(history.history['val_loss'])
             if current_val_loss < best_overall_val_loss:
                 best_overall_val_loss = current_val_loss
-                best_model_path = checkpoint_path
 
         self._log_final_cv_results(all_fold_results, comet_logger)
 

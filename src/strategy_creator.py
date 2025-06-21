@@ -73,8 +73,6 @@ class StrategyCreator:
         return strategies[self.use_comet]
 
     def get_dataset_path_by_data_type(self):
-        base_data_dir = "dataset/"
-
         type_path_map = {
             DataType.normal.label: DataType.normal.path,
             DataType.l1000.label: DataType.l1000.path,
@@ -94,7 +92,6 @@ class StrategyCreator:
         if self.evaluation_source is None:
             raise ValueError("evaluation_source must be provided for cross_domain split type.")
 
-        base_data_dir = "dataset/"
         type_path_map = {
             DataType.normal.label: DataType.normal.path,
             DataType.l1000.label: DataType.l1000.path,

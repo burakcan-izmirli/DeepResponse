@@ -1,7 +1,6 @@
 """ Drug cell stratified dataset strategy """
 import logging
 import pandas as pd
-import numpy as np
 import concurrent.futures
 import tensorflow as tf
 from sklearn.model_selection import GroupKFold, train_test_split
