@@ -15,6 +15,10 @@ def binarize_data(data, threshold=BinaryThreshold.threshold.value):
     :param threshold: Threshold
     :return Binary dataset
     """
+    if hasattr(data, 'values'):
+        data = data.values
+    if data.ndim == 1:
+        data = data.reshape(-1, 1)
     return Binarizer(threshold=threshold).transform(data)
 
 
@@ -29,14 +33,20 @@ def evaluate_model(y_test, y_pred):
     np.save("y_test.npy", y_test)
     np.save("y_pred.npy", y_pred)
 
+    y_test_flat = y_test.flatten()
+    y_pred_flat = y_pred.flatten()
+
+    y_test_binarized = binarize_data(y_test).flatten()
+    y_pred_binarized = binarize_data(y_pred).flatten()
+
     return {"Mean Squared Error": mean_squared_error(y_test, y_pred),
             "Mean Absolute Error": mean_absolute_error(y_test, y_pred),
             "Root Mean Squared Error": mean_squared_error(y_test, y_pred, squared=False),
             "R2 Score": r2_score(y_test, y_pred),
-            "Pearson": pearsonr(y_test.flatten(), y_pred.flatten()),
-            "Spearman": spearmanr(y_test, y_pred),
-            "Accuracy": accuracy_score(binarize_data(y_test), binarize_data(y_pred)),
-            "Precision": precision_score(binarize_data(y_test), binarize_data(y_pred)),
-            "Recall": recall_score(binarize_data(y_test), binarize_data(y_pred)),
-            "F1 Score": f1_score(binarize_data(y_test), binarize_data(y_pred)),
-            "Matthew's Correlation Coef": matthews_corrcoef(binarize_data(y_test), binarize_data(y_pred))}
+            "Pearson": pearsonr(y_test_flat, y_pred_flat),
+            "Spearman": spearmanr(y_test_flat, y_pred_flat),
+            "Accuracy": accuracy_score(y_test_binarized, y_pred_binarized),
+            "Precision": precision_score(y_test_binarized, y_pred_binarized),
+            "Recall": recall_score(y_test_binarized, y_pred_binarized),
+            "F1 Score": f1_score(y_test_binarized, y_pred_binarized),
+            "Matthew's Correlation Coef": matthews_corrcoef(y_test_binarized, y_pred_binarized)}
