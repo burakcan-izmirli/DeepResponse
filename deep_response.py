@@ -1,43 +1,56 @@
-""" Main file of deep response """
-from comet_ml import Experiment
+""" DeepResponse """
 import logging
-import tensorflow as tf
+import os
+from argparse import Namespace
 
 from helper.argument_parser import argument_parser
 from helper.seed_setter import set_seed
 from src.strategy_creator import StrategyCreator
 
-tf.config.run_functions_eagerly(True)
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(name)s:%(asctime)s:%(message)s')
+logging.getLogger('tensorflow').setLevel(logging.ERROR)
 
 
-class DeepResponse(StrategyCreator):
-    """ DeepResponse"""
+class DeepResponse:
+    def __init__(self, args: Namespace):
+        self.strategy_creator = StrategyCreator(args)
 
     def main(self):
-        """ Main function """
-        logging.info("DeepResponse was started.")
+        logging.info("DeepResponse started.")
+        args = self.strategy_creator.args
 
-        comet = self.get_comet_strategy().integrate_comet()
+        comet_logger = self.strategy_creator.get_comet_strategy().integrate_comet()
 
-        set_seed(self.random_state)
+        logging.info(f"SELFormer Trainable Layers: {args.selformer_trainable_layers}")
+        logging.info(f"Learning Task: {args.learning_task}, Split Type: {args.split_type}")
+        logging.info(f"Learning Rate: {args.learning_rate}, Epochs: {args.epoch}, Batch Size: {args.batch_size}")
 
-        split_strategy = self.get_split_strategy()
-        dataset_strategy = split_strategy['dataset']
-        model_training_strategy = split_strategy['training']
+        set_seed(args.random_state)
 
-        learning_task_strategy = self.get_learning_task_strategy()
-        raw_dataset = dataset_strategy.read_and_shuffle_dataset(self.random_state)
-        dataset_iterator = dataset_strategy.prepare_dataset(
-            raw_dataset, self.split_type, self.batch_size, self.random_state, learning_task_strategy
+        split_strategy_dict = self.strategy_creator.get_split_strategy()
+        dataset_strategy = split_strategy_dict['dataset']
+        model_training_strategy = split_strategy_dict['training']
+
+        learning_task_strategy_instance = self.strategy_creator.get_learning_task_strategy()
+
+        raw_dataset_dict = dataset_strategy.read_and_shuffle_dataset(args.random_state)
+
+        dataset_input = dataset_strategy.prepare_dataset(
+            raw_dataset_dict,
+            args.split_type,
+            args.batch_size,
+            args.random_state,
+            learning_task_strategy_instance
         )
 
-        model_creation_strategy = self.get_model_creation_strategy()
-
         model_training_strategy.train_and_evaluate_model(
-            model_creation_strategy, dataset_iterator, self.batch_size,
-            self.learning_rate, self.epoch, comet, learning_task_strategy
+            self.strategy_creator,
+            dataset_input,
+            comet_logger
         )
 
 
 if __name__ == '__main__':
-    DeepResponse(*argument_parser()).main()
+    args = argument_parser()
+    DeepResponse(args).main()
