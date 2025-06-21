@@ -1,58 +1,74 @@
 """ Regression Learning Task Strategy """
-from tensorflow import keras
+import logging
+import pandas as pd
+import numpy as np
 import tensorflow as tf
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-import matplotlib.pyplot as plt
-
+from src.model.evaluate_model import evaluate_model
+from src.model.visualize_results import visualize_results
 from src.model.learning_task.base_learning_task_strategy import BaseLearningTaskStrategy
+from sklearn.metrics import r2_score
+
 
 class RegressionLearningTaskStrategy(BaseLearningTaskStrategy):
     """ Strategy for regression learning tasks. """
 
     def get_loss_function(self):
-        return keras.losses.Huber()
+        return tf.keras.losses.Huber()
 
     def get_metrics(self):
+        def r2(y_true, y_pred):
+            return tf.py_function(r2_score, (y_true, y_pred), tf.double)
+        r2.__name__ = 'r2_score'
         return [
-            keras.metrics.MeanSquaredError(name='mse'),
-            keras.metrics.RootMeanSquaredError(name='rmse'),
-            keras.metrics.MeanAbsoluteError(name='mae'),
-            self.r2_score_tf
+            tf.keras.metrics.MeanSquaredError(name='mse'),
+            tf.keras.metrics.RootMeanSquaredError(name='rmse'),
+            tf.keras.metrics.MeanAbsoluteError(name='mae'),
+            r2
         ]
 
     def process_targets(self, y):
-        """ Pass-through for regression targets, returns pic50 values unchanged. """
-        return y['pic50']
+        """ Ensures targets are in the correct format for regression. """
+        return y
 
     def compile_model(self, model, learning_rate):
-        loss_function = self.get_loss_function()
-        metrics = self.get_metrics()
-        model.compile(optimizer=tf.optimizers.Adam(learning_rate=learning_rate),
-                      loss=loss_function, metrics=metrics)
-        return model
-
-    def r2_score_tf(self, y_true, y_pred):
-        ss_res = tf.reduce_sum(tf.square(y_true - y_pred))
-        ss_tot = tf.reduce_sum(tf.square(y_true - tf.reduce_mean(y_true)))
-        return 1 - ss_res / (ss_tot + keras.backend.epsilon())
+        """ Compiles the model for regression. """
+        optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+        model.compile(
+            optimizer=optimizer,
+            loss=self.get_loss_function(),
+            metrics=self.get_metrics()
+        )
+        logging.info("Regression model compiled with Adam optimizer.")
 
     def evaluate_model(self, y_true, y_pred, comet=None):
-        mse = mean_squared_error(y_true, y_pred)
-        mae = mean_absolute_error(y_true, y_pred)
-        r2 = r2_score(y_true, y_pred)
-        metrics = {'mse': mse, 'mae': mae, 'r2': r2}
-        if comet:
-            comet.log_metrics(metrics)
-        return metrics
+        """ Evaluates the regression model and logs metrics. """
+        if isinstance(y_true, (pd.DataFrame, pd.Series)):
+            y_true = y_true.to_numpy()
 
-    def visualize_results(self, y_true, y_pred, comet=None):
-        plt.figure(figsize=(10, 6))
-        plt.scatter(y_true, y_pred, alpha=0.3)
-        plt.plot([min(y_true), max(y_true)], [min(y_true), max(y_true)], color='red')
-        plt.xlabel('True Values')
-        plt.ylabel('Predictions')
-        plt.title('True vs Predicted Values')
-        plt.grid(True)
+        if not isinstance(y_pred, np.ndarray):
+            y_pred = np.array(y_pred)
+
+        y_true = y_true.flatten()
+        y_pred = y_pred.flatten()
+
+        metrics = evaluate_model(y_true, y_pred)
+
+        logging.info(f"Evaluation metrics: {metrics}")
         if comet:
-            comet.log_figure(figure_name='Regression Results', figure=plt)
-        plt.show()
+            comet.log_metrics({
+                "Mean Squared Error": metrics["Mean Squared Error"],
+                "Mean Absolute Error": metrics["Mean Absolute Error"],
+                "Root Mean Squared Error": metrics["Root Mean Squared Error"],
+                "R2 Score": metrics["R2 Score"],
+                "Pearson Correlation": metrics["Pearson"][0],
+                "Pearson p-value": metrics["Pearson"][1],
+                "Spearman Correlation": metrics["Spearman"].correlation,
+                "Spearman p-value": metrics["Spearman"].pvalue,
+                "Accuracy": metrics["Accuracy"],
+                "Precision": metrics["Precision"],
+                "Recall": metrics["Recall"],
+                "F1 Score": metrics["F1 Score"],
+                "Matthew's Correlation Coef": metrics["Matthew's Correlation Coef"]
+            })
+
+        visualize_results(y_true, y_pred, comet)
