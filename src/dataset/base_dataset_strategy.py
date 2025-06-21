@@ -1,83 +1,94 @@
-""" Base Dataset Strategy """
-
 import logging
 import pandas as pd
 import numpy as np
 import tensorflow as tf
 from abc import ABC, abstractmethod
 
-from src.model.build.graph_neural_network.mpnn import convert_smiles_to_graph, prepare_batch
-
 
 class BaseDatasetStrategy(ABC):
-    """ Base dataset strategy """
-
     def __init__(self, data_path, evaluation_data_path=None):
         self.data_path = data_path
         self.evaluation_data_path = evaluation_data_path
 
     @abstractmethod
     def split_dataset(self, dataset, *args, **kwargs):
-        """ Split dataset """
-        pass
+        ...
 
     @abstractmethod
     def create_splitter(self, dataset, random_state):
-        """ Create splitter """
-        pass
-
-    @abstractmethod
-    def prepare_dataset(self, dataset, split_type, batch_size, random_state, learning_task_strategy):
-        """ Prepare dataset """
-        pass
+        ...
 
     @abstractmethod
     def read_and_shuffle_dataset(self, random_state):
-        """ Read and shuffle dataset """
-        pass
+        ...
 
-    @staticmethod
-    def create_mpnn_and_conv_dataset(dataset_raw):
-        """ Creating the dataset into two for Message Passing Neural Network (MPNN) and
-            Convolutional Neural Network (CONV) """
-        mpnn = dataset_raw[['drug_name', 'smiles']].drop_duplicates(subset='drug_name')
-        conv = dataset_raw[['cell_line_name', 'cell_line_features']].drop_duplicates(subset='cell_line_name')
+    @abstractmethod
+    def prepare_dataset(self, dataset_dict, split_type, batch_size, random_state,
+                        learning_task_strategy):
+        ...
 
-        return mpnn, conv
+    def create_drug_and_conv_dataset(self, dataset_raw):
+        if 'drug_name' not in dataset_raw.columns or 'smiles' not in dataset_raw.columns:
+            raise ValueError("Dataset must contain 'drug_name' and 'smiles' columns.")
+        drug_smiles_lookup = \
+        dataset_raw[['drug_name', 'smiles']].drop_duplicates(subset='drug_name').set_index('drug_name')['smiles']
 
-    @staticmethod
-    def convert_conv_dataset(data):
-        """ Convert conv dataset to optimized format """
-        logging.info("Convert conv dataset is started.")
-        return np.array([row for row in data])
+        if 'cell_line_name' not in dataset_raw.columns or 'cell_line_features' not in dataset_raw.columns:
+            raise ValueError("Dataset must contain 'cell_line_name' and 'cell_line_features' columns.")
+        cell_features_lookup = \
+        dataset_raw[['cell_line_name', 'cell_line_features']].drop_duplicates(subset='cell_line_name').set_index(
+            'cell_line_name')['cell_line_features']
+        return drug_smiles_lookup, cell_features_lookup
 
-    def tf_dataset_creator(self, x, y, batch_size, mpnn, conv, learning_task_strategy):
-        """
-        Create a batched and prefetched TensorFlow dataset, applying the learning task strategy as needed.
+    def tf_dataset_creator(self, x_data_df, y_data_df, batch_size,
+                           cell_features_lookup,
+                           drug_smiles_lookup,
+                           learning_task_strategy,
+                           is_training=True):
 
-        Parameters:
-        - x: Independent variables
-        - y: Dependent variable
-        - batch_size: Batch size
-        - mpnn: MPNN dataset
-        - conv: Conv dataset
-        - learning_task_strategy: Strategy to process targets for specific learning tasks
+        logging.info(f"Creating TensorFlow dataset. Training: {is_training}, Samples: {len(x_data_df)}")
 
-        Returns:
-        - atom_dim: Dimension of atom features
-        - bond_dim: Dimension of bond features
-        - x_conv_shape: Shape of the convolutional dataset
-        - batched_dataset: TensorFlow batched and prefetched dataset
-        """
-        x_data = pd.DataFrame(x.astype('str'), columns=['drug_name', 'cell_line_name'])
-        x_data = x_data.merge(mpnn).merge(conv)
-        del mpnn, conv
-        x_mpnn = convert_smiles_to_graph(x_data.smiles)
-        x_conv = self.convert_conv_dataset(x_data.cell_line_features)
-        del x_data
-        
-        y = learning_task_strategy.process_targets(y)
-        batched_dataset = tf.data.Dataset.from_tensor_slices((x_conv, x_mpnn, y)). \
-            batch(batch_size).map(prepare_batch, num_parallel_calls=-1).prefetch(tf.data.AUTOTUNE)
+        if len(x_data_df) != len(y_data_df):
+            raise ValueError(f"Mismatch in lengths of x_data_df ({len(x_data_df)}) and y_data_df ({len(y_data_df)}).")
 
-        return x_mpnn[0][0][0].shape[0], x_mpnn[1][0][0].shape[0], x_conv.shape, batched_dataset
+        required_cols = ['cell_line_name', 'drug_name']
+        if not all(col in x_data_df.columns for col in required_cols):
+            raise ValueError(f"x_data_df missing required columns: {required_cols}")
+
+        # Prepare data using vectorized operations for efficiency
+        x_data_df_reset = x_data_df.reset_index(drop=True)
+        y_data_df_reset = y_data_df.reset_index(drop=True)
+
+        valid_indices = x_data_df_reset['cell_line_name'].isin(cell_features_lookup.index) & \
+                        x_data_df_reset['drug_name'].isin(drug_smiles_lookup.index)
+
+        x_data_filtered = x_data_df_reset[valid_indices]
+        y_data_filtered = y_data_df_reset[valid_indices]
+
+        num_skipped = len(x_data_df_reset) - len(x_data_filtered)
+        if num_skipped > 0:
+            logging.warning(f"Skipped {num_skipped} entries due to missing cell features or drug SMILES.")
+
+        if x_data_filtered.empty:
+            raise ValueError("No valid data pairs found after filtering. Cannot proceed with an empty dataset.")
+
+        cell_features = np.array(x_data_filtered['cell_line_name'].map(cell_features_lookup).tolist())
+        drug_smiles = np.array(x_data_filtered['drug_name'].map(drug_smiles_lookup).tolist())
+        targets = y_data_filtered.values.astype(np.float32)
+
+        # Create TensorFlow dataset
+        dataset = tf.data.Dataset.from_tensor_slices((
+            (drug_smiles, cell_features),
+            targets
+        ))
+
+        if is_training:
+            dataset = dataset.shuffle(buffer_size=len(x_data_filtered),
+                                      seed=self.random_state if hasattr(self, 'random_state') else None)
+
+        dataset = dataset.batch(batch_size).prefetch(tf.data.AUTOTUNE)
+
+        drug_shape = ()
+        cell_shape = cell_features.shape[1:]
+
+        return drug_shape, cell_shape, dataset

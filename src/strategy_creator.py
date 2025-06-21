@@ -1,4 +1,3 @@
-""" Strategy creator """
 import logging
 from helper.enum.dataset.data_type import DataType
 
@@ -21,83 +20,135 @@ from src.model.learning_task.classification_learning_task_strategy import Classi
 from src.model.learning_task.regression_learning_task_strategy import RegressionLearningTaskStrategy
 
 class StrategyCreator:
-    """ Strategy creator """
+    def __init__(self, args):
+        self.args = args
 
-    def __init__(self, use_comet, data_source, evaluation_source, data_type, split_type, random_state, batch_size,
-                 epoch, learning_rate, learning_task):
-        self.use_comet = use_comet
-        self.data_source = data_source
-        self.evaluation_source = evaluation_source
-        self.data_type = data_type
-        self.split_type = split_type
-        self.random_state = random_state
-        self.batch_size = batch_size
-        self.epoch = epoch
-        self.learning_rate = learning_rate
-        self.learning_task = learning_task
-        logging.basicConfig(level=logging.INFO)
+    @property
+    def use_comet(self):
+        return self.args.use_comet
+
+    @property
+    def data_source(self):
+        return self.args.data_source
+
+    @property
+    def evaluation_source(self):
+        return self.args.evaluation_source
+
+    @property
+    def data_type(self):
+        return self.args.data_type
+
+    @property
+    def split_type(self):
+        return self.args.split_type
+
+    @property
+    def random_state(self):
+        return self.args.random_state
+
+    @property
+    def batch_size(self):
+        return self.args.batch_size
+
+    @property
+    def epoch(self):
+        return self.args.epoch
+
+    @property
+    def learning_rate(self):
+        return self.args.learning_rate
+
+    @property
+    def learning_task(self):
+        return self.args.learning_task
+
+    @property
+    def selformer_trainable_layers(self):
+        return self.args.selformer_trainable_layers
+
 
     def get_comet_strategy(self):
-        """ Get comet strategy """
-        strategies = {
-            True: UseCometStrategy(),
-            False: SkipCometStrategy()
-        }
+        strategies = { True: UseCometStrategy(), False: SkipCometStrategy() }
         return strategies[self.use_comet]
 
     def get_dataset_path_by_data_type(self):
-        """ Get dataset path by data type """
-        paths = {
-            DataType.normal.label: DataType.prefix.path + self.data_source + DataType.normal.path,
-            DataType.l1000.label: DataType.prefix.path + self.data_source + DataType.l1000.path,
-            DataType.l1000_cross_domain.label: DataType.prefix.path + self.data_source + DataType.l1000_cross_domain.path,
-            DataType.pathway.label: DataType.prefix.path + self.data_source + DataType.pathway.path,
-            DataType.pathway_reduced.label: DataType.prefix.path + self.data_source + DataType.pathway_reduced.path,
-            DataType.digestive.label: DataType.prefix.path + self.data_source + DataType.digestive.path
+        base_data_dir = "dataset/"
+
+        type_path_map = {
+            DataType.normal.label: DataType.normal.path,
+            DataType.l1000.label: DataType.l1000.path,
+            DataType.l1000_cross_domain.label: DataType.l1000_cross_domain.path,
+            DataType.pathway.label: DataType.pathway.path,
+            DataType.pathway_reduced.label: DataType.pathway_reduced.path,
+            DataType.digestive.label: DataType.digestive.path
         }
-        return paths[self.data_type]
+        relative_path = type_path_map.get(self.data_type)
+        if relative_path is None:
+            raise ValueError(f"Unknown data_type: {self.data_type}")
+
+        return DataType.prefix.path + self.data_source + type_path_map[self.data_type]
+
 
     def get_evaluation_dataset_path_by_data_type(self):
-        """ Get evaluation dataset path by data type """
-        paths = {
-            DataType.normal.label: DataType.prefix.path + self.evaluation_source + DataType.normal.path,
-            DataType.l1000.label: DataType.prefix.path + self.evaluation_source + DataType.l1000.path,
-            DataType.l1000_cross_domain.label: DataType.prefix.path + self.data_source + DataType.l1000_cross_domain.path,
-            DataType.pathway.label: DataType.prefix.path + self.evaluation_source + DataType.pathway.path,
-            DataType.pathway_reduced.label: DataType.prefix.path + self.evaluation_source + DataType.pathway_reduced.path,
-            DataType.digestive.label: DataType.prefix.path + self.evaluation_source + DataType.digestive.path
+        if self.evaluation_source is None:
+            raise ValueError("evaluation_source must be provided for cross_domain split type.")
+
+        base_data_dir = "dataset/"
+        type_path_map = {
+            DataType.normal.label: DataType.normal.path,
+            DataType.l1000.label: DataType.l1000.path,
+            DataType.l1000_cross_domain.label: DataType.l1000_cross_domain.path,
+            DataType.pathway.label: DataType.pathway.path,
+            DataType.pathway_reduced.label: DataType.pathway_reduced.path,
+            DataType.digestive.label: DataType.digestive.path
         }
-        return paths[self.data_type]
+        relative_path = type_path_map.get(self.data_type)
+        if relative_path is None:
+            raise ValueError(f"Unknown data_type for evaluation: {self.data_type}")
+
+        if self.data_type == DataType.l1000_cross_domain.label and self.evaluation_source != self.data_source:
+             logging.info(f"Using evaluation_source for l1000_cross_domain: {self.evaluation_source}")
+             return DataType.prefix.path + self.evaluation_source + type_path_map[self.data_type]
+
+        return DataType.prefix.path + self.evaluation_source + type_path_map[self.data_type]
 
     def get_split_strategy(self):
-        """ Get split strategy """
-        strategies = {
-            'random': {'dataset': RandomSplitDatasetStrategy(self.get_dataset_path_by_data_type()),
-                       'training': RandomSplitTrainingStrategy()},
-            'cell_stratified': {'dataset': CellStratifiedDatasetStrategy(self.get_dataset_path_by_data_type()),
-                                'training': StratifiedSplitTrainingStrategy()},
-            'drug_stratified': {'dataset': DrugStratifiedDatasetStrategy(self.get_dataset_path_by_data_type()),
-                                'training': StratifiedSplitTrainingStrategy()},
-            'drug_cell_stratified': {'dataset': DrugCellStratifiedDatasetStrategy(self.get_dataset_path_by_data_type()),
-                                     'training': StratifiedSplitTrainingStrategy()},
-            'cross_domain': {'dataset': CrossDomainDatasetStrategy(self.get_dataset_path_by_data_type(),
-                                                                   self.get_evaluation_dataset_path_by_data_type()),
-                             'training': RandomSplitTrainingStrategy()},
-        }
-        return strategies[self.split_type]
+        split_type = self.split_type
+
+        if split_type == 'random':
+            dataset_strategy = RandomSplitDatasetStrategy(self.get_dataset_path_by_data_type())
+            training_strategy = RandomSplitTrainingStrategy()
+        elif split_type == 'cell_stratified':
+            dataset_strategy = CellStratifiedDatasetStrategy(self.get_dataset_path_by_data_type())
+            training_strategy = StratifiedSplitTrainingStrategy()
+        elif split_type == 'drug_stratified':
+            dataset_strategy = DrugStratifiedDatasetStrategy(self.get_dataset_path_by_data_type())
+            training_strategy = StratifiedSplitTrainingStrategy()
+        elif split_type == 'drug_cell_stratified':
+            dataset_strategy = DrugCellStratifiedDatasetStrategy(self.get_dataset_path_by_data_type())
+            training_strategy = StratifiedSplitTrainingStrategy()
+        elif split_type == 'cross_domain':
+            dataset_strategy = CrossDomainDatasetStrategy(self.get_dataset_path_by_data_type(),
+                                                          self.get_evaluation_dataset_path_by_data_type())
+            training_strategy = RandomSplitTrainingStrategy()
+        else:
+            raise ValueError(f"Unknown split_type: {split_type}")
+
+        return {'dataset': dataset_strategy, 'training': training_strategy}
 
     def get_model_creation_strategy(self):
-        """ Get model strategy """
-        strategies = {
-            'classification': ClassificationModelCreationStrategy(),
-            'regression': RegressionModelCreationStrategy(),
-        }
-        return strategies[self.learning_task]
-        
+        if self.learning_task == 'classification':
+            return ClassificationModelCreationStrategy()
+        elif self.learning_task == 'regression':
+            return RegressionModelCreationStrategy()
+        else:
+            raise ValueError(f"Unknown learning_task: {self.learning_task}")
+
     def get_learning_task_strategy(self):
-        """ Get learning task strategy """
-        strategies = {
-            'classification': ClassificationLearningTaskStrategy(),
-            'regression': RegressionLearningTaskStrategy(),
-        }
-        return strategies[self.learning_task]
+        if self.learning_task == 'classification':
+            return ClassificationLearningTaskStrategy()
+        elif self.learning_task == 'regression':
+            return RegressionLearningTaskStrategy()
+        else:
+            raise ValueError(f"Unknown learning_task: {self.learning_task}")

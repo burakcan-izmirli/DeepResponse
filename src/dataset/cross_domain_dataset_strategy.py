@@ -42,20 +42,21 @@ class CrossDomainDatasetStrategy(BaseDatasetStrategy):
 
         return x_train_df, x_val_df, x_test_df, y_train_df, y_val_df, y_test_df
 
-    def prepare_dataset(self, dataset, split_type, batch_size, random_state):
+    def prepare_dataset(self, dataset_dict, split_type, batch_size, random_state, learning_task_strategy):
         """
-        Main function for preparing dataset
-        :param dataset: Dataset
-        :param split_type: Split type [random, cell_stratified, drug_stratified, cell_drug_stratified]
-        :param batch_size: Batch size
-        :param random_state: Random state
-        :return: atom_dim, bond_dim, train_dataset, valid_dataset, test_dataset
+        Main function for preparing dataset for cross-domain validation.
+        :param dataset_dict: Dictionary containing 'dataset' and 'evaluation_dataset'.
+        :param split_type: Split type (not used directly, but for signature consistency).
+        :param batch_size: Batch size.
+        :param random_state: Random state.
+        :param learning_task_strategy: The learning task strategy instance.
+        :return: (drug_shape, cell_shape), train_dataset, valid_dataset, test_dataset, y_test
         """
 
-        dataset, evaluation_dataset = dataset['dataset'], dataset['evaluation_dataset']
+        dataset, evaluation_dataset = dataset_dict['dataset'], dataset_dict['evaluation_dataset']
 
-        mpnn_dataset, conv_dataset = self.create_mpnn_and_conv_dataset(dataset)
-        mpnn_evaluation_dataset, conv_evaluation_dataset = self.create_mpnn_and_conv_dataset(evaluation_dataset)
+        drug_smiles_lookup, cell_features_lookup = self.create_drug_and_conv_dataset(dataset)
+        eval_drug_smiles_lookup, eval_cell_features_lookup = self.create_drug_and_conv_dataset(evaluation_dataset)
 
         dataset = dataset[['drug_name', 'cell_line_name', 'pic50']]
         evaluation_dataset = evaluation_dataset[['drug_name', 'cell_line_name', 'pic50']]
@@ -63,20 +64,20 @@ class CrossDomainDatasetStrategy(BaseDatasetStrategy):
         # Splitting dataset into train, validation, and test
         x_train, x_val, x_test, y_train, y_val, y_test = self.split_dataset(dataset, evaluation_dataset, random_state)
 
-        with concurrent.futures.ThreadPoolExecutor() as executor:
+        # Process targets
+        y_train = learning_task_strategy.process_targets(y_train)
+        y_val = learning_task_strategy.process_targets(y_val)
+        y_test = learning_task_strategy.process_targets(y_test)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
             # Creating Tensorflow datasets in parallel
-            futures = [
-                executor.submit(self.tf_dataset_creator, x_train, y_train, batch_size, mpnn_dataset, conv_dataset),
-                executor.submit(self.tf_dataset_creator, x_val, y_val, batch_size, mpnn_dataset, conv_dataset),
-                executor.submit(self.tf_dataset_creator, x_test, y_test, batch_size, mpnn_evaluation_dataset,
-                                conv_evaluation_dataset)
-            ]
+            future_train = executor.submit(self.tf_dataset_creator, x_train, y_train, batch_size, cell_features_lookup, drug_smiles_lookup, learning_task_strategy, is_training=True)
+            future_val = executor.submit(self.tf_dataset_creator, x_val, y_val, batch_size, cell_features_lookup, drug_smiles_lookup, learning_task_strategy, is_training=False)
+            future_test = executor.submit(self.tf_dataset_creator, x_test, y_test, batch_size, eval_cell_features_lookup, eval_drug_smiles_lookup, learning_task_strategy, is_training=False)
 
-            # Use as_completed to iterate over completed futures
-            results = [future.result() for future in futures]
+            drug_shape, cell_shape, train_dataset = future_train.result()
+            _, _, valid_dataset = future_val.result()
+            _, _, test_dataset = future_test.result()
 
-        # Unpack the results
-        atom_dim, bond_dim, cell_line_dim = results[0][:3]
-        train_dataset, valid_dataset, test_dataset = [result[3] for result in results]
 
-        return (atom_dim, bond_dim, cell_line_dim), train_dataset, valid_dataset, test_dataset, y_test
+        return (drug_shape, cell_shape), train_dataset, valid_dataset, test_dataset, y_test

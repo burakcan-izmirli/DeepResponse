@@ -1,7 +1,5 @@
-""" Random Split Dataset Strategy """
-
+import logging
 import pandas as pd
-import concurrent.futures
 from sklearn.model_selection import train_test_split
 
 from helper.enum.dataset.split_ratio import SplitRatio
@@ -9,65 +7,85 @@ from src.dataset.base_dataset_strategy import BaseDatasetStrategy
 
 
 class RandomSplitDatasetStrategy(BaseDatasetStrategy):
-    """ Random split dataset strategy """
+    """Random split dataset strategy."""
 
     def read_and_shuffle_dataset(self, random_state):
-        """ Read and shuffle dataset """
+        """Reads and shuffles the dataset from a pickle file."""
+        logging.info("Reading and shuffling dataset for random split...")
+        try:
+            dataset_raw = pd.read_pickle(self.data_path)
+        except FileNotFoundError:
+            logging.error(f"Dataset file not found at: {self.data_path}")
+            raise
 
-        dataset_raw = pd.read_pickle(self.data_path)
         dataset_raw = dataset_raw.sample(frac=1, random_state=random_state).reset_index(drop=True)
-
-        # evaluation_dataset_raw = pd.read_pickle(self.evaluation_data_path)
-        # evaluation_dataset_raw = evaluation_dataset_raw.sample(frac=1, random_state=random_state). \
-        #     reset_index(drop=True)
-
-        return {'dataset': dataset_raw}
+        logging.info(f"Dataset loaded with {len(dataset_raw)} samples.")
+        return {'dataset': dataset_raw, 'evaluation_dataset': None}
 
     def create_splitter(self, dataset, random_state):
-        """ Create splitter """
-        pass
+        """Not needed for simple random split."""
+        ...
 
-    def split_dataset(self, dataset, random_state):
-        """ Splitting dataset as train, validation, and test """
+    def split_dataset(self, dataset_to_split, random_state):
+        """Splits dataset into train, validation, and test sets."""
+        logging.info("Splitting dataset into train, validation, and test sets randomly.")
 
-        x_train_df, x_test_df, y_train_df, y_test_df = train_test_split(
-            dataset[['drug_name', 'cell_line_name']], dataset[['pic50']],
-            test_size=SplitRatio.test_ratio.value, random_state=random_state
+        required_cols = ['drug_name', 'cell_line_name', 'pic50']
+        if not all(col in dataset_to_split.columns for col in required_cols):
+            raise ValueError(f"Dataset for splitting is missing one of the required columns: {required_cols}")
+
+        X = dataset_to_split[['drug_name', 'cell_line_name']]
+        y = dataset_to_split[['pic50']]
+
+        x_train_val, x_test, y_train_val, y_test = train_test_split(
+            X, y,
+            test_size=SplitRatio.test_ratio.value,
+            random_state=random_state
         )
 
-        x_train_df, x_val_df, y_train_df, y_val_df = train_test_split(
-            x_train_df, y_train_df,
-            test_size=SplitRatio.validation_ratio.value, random_state=random_state
+        # Calculate validation set size relative to the training set
+        relative_val_size = SplitRatio.validation_ratio.value / (1.0 - SplitRatio.test_ratio.value)
+
+        x_train, x_val, y_train, y_val = train_test_split(
+            x_train_val, y_train_val,
+            test_size=relative_val_size,
+            random_state=random_state
         )
-        return x_train_df, x_val_df, x_test_df, y_train_df, y_val_df, y_test_df
 
-    def prepare_dataset(self, dataset, split_type, batch_size, random_state, learning_task_strategy):
+        logging.info(f"Split sizes: Train={len(x_train)}, Val={len(x_val)}, Test={len(x_test)}")
+        return x_train, x_val, x_test, y_train, y_val, y_test
+
+    def prepare_dataset(self, dataset_dict, split_type, batch_size, random_state, learning_task_strategy):
         """
-        Main function for preparing dataset with learning task strategy.
-
-        :param dataset: Dataset
-        :param split_type: Split type [random, cell_stratified, drug_stratified, cell_drug_stratified]
-        :param batch_size: Batch size
-        :param random_state: Random state
-        :param learning_task_strategy: Strategy for specific learning task
-        :return: Tuple containing atom_dim, bond_dim, cell_line_dim, train_datasets, valid_datasets, test_datasets, y_test
+        Prepares dataset for random split.
+        Returns a tuple: ((drug_input_shape, cell_input_shape), train_ds, valid_ds, test_ds, y_test_df)
         """
-        dataset = dataset['dataset']
-        mpnn_dataset, conv_dataset = self.create_mpnn_and_conv_dataset(dataset)
-        dataset = dataset[['drug_name', 'cell_line_name', 'pic50']]
+        dataset_df = dataset_dict['dataset']
 
-        x_train, x_val, x_test, y_train, y_val, y_test = self.split_dataset(dataset, random_state)
+        drug_smiles_lookup, cell_features_lookup = self.create_drug_and_conv_dataset(dataset_df)
 
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            futures = [
-                executor.submit(self.tf_dataset_creator, x_train, y_train, batch_size, mpnn_dataset, conv_dataset, learning_task_strategy),
-                executor.submit(self.tf_dataset_creator, x_val, y_val, batch_size, mpnn_dataset, conv_dataset, learning_task_strategy),
-                executor.submit(self.tf_dataset_creator, x_test, y_test, batch_size, mpnn_dataset, conv_dataset, learning_task_strategy)
-            ]
+        x_train, x_val, x_test, y_train, y_val, y_test = self.split_dataset(
+            dataset_df, random_state
+        )
 
-            results = [future.result() for future in futures]
+        # Process targets
+        y_train = learning_task_strategy.process_targets(y_train)
+        y_val = learning_task_strategy.process_targets(y_val)
+        y_test = learning_task_strategy.process_targets(y_test)
 
-        atom_dim, bond_dim, cell_line_dim = results[0][:3]
-        train_dataset, valid_dataset, test_dataset = [result[3] for result in results]
+        drug_shape, cell_shape, train_dataset = self.tf_dataset_creator(
+            x_train, y_train, batch_size, cell_features_lookup, drug_smiles_lookup, learning_task_strategy,
+            is_training=True
+        )
 
-        return (atom_dim, bond_dim, cell_line_dim), train_dataset, valid_dataset, test_dataset, y_test
+        _, _, valid_dataset = self.tf_dataset_creator(
+            x_val, y_val, batch_size, cell_features_lookup, drug_smiles_lookup, learning_task_strategy,
+            is_training=False
+        )
+
+        _, _, test_dataset = self.tf_dataset_creator(
+            x_test, y_test, batch_size, cell_features_lookup, drug_smiles_lookup, learning_task_strategy,
+            is_training=False
+        )
+
+        return (drug_shape, cell_shape), train_dataset, valid_dataset, test_dataset, y_test
