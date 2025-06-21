@@ -29,14 +29,27 @@ class ClassificationLearningTaskStrategy(BaseLearningTaskStrategy):
         return (y >= BinaryThreshold.value.value).astype(int)
 
     def compile_model(self, model, learning_rate):
-        """Compiles the model for classification."""
-        optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
-        model.compile(
-            optimizer=optimizer,
-            loss=self.get_loss_function(),
-            metrics=self.get_metrics()
-        )
-        logging.info("Classification model compiled with Adam optimizer.")
+        """
+        Compiles the model for classification with proper error handling.
+        
+        Args:
+            model: TensorFlow/Keras model to compile
+            learning_rate: Learning rate for the optimizer
+        """
+        try:
+            if learning_rate <= 0:
+                raise ValueError(f"Learning rate must be positive, got: {learning_rate}")
+
+            optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+            model.compile(
+                optimizer=optimizer,
+                loss=self.get_loss_function(),
+                metrics=self.get_metrics()
+            )
+            logging.info(f"Classification model compiled successfully with Adam optimizer (lr={learning_rate}).")
+        except Exception as e:
+            logging.error(f"Failed to compile classification model: {e}")
+            raise
 
     def evaluate_model(self, y_true, y_pred, comet=None):
         """Evaluates the classification model and logs metrics."""

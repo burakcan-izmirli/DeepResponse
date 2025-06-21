@@ -1,4 +1,5 @@
 import logging
+from functools import lru_cache
 from helper.enum.dataset.data_type import DataType
 
 from src.comet.use_comet_strategy import UseCometStrategy
@@ -72,7 +73,17 @@ class StrategyCreator:
         strategies = { True: UseCometStrategy(), False: SkipCometStrategy() }
         return strategies[self.use_comet]
 
+    @lru_cache(maxsize=1)
     def get_dataset_path_by_data_type(self):
+        """
+        Get the dataset path based on data type and source.
+        
+        Returns:
+            str: Full path to the dataset
+            
+        Raises:
+            ValueError: If data_type is not recognized
+        """
         type_path_map = {
             DataType.normal.label: DataType.normal.path,
             DataType.l1000.label: DataType.l1000.path,
@@ -81,14 +92,24 @@ class StrategyCreator:
             DataType.pathway_reduced.label: DataType.pathway_reduced.path,
             DataType.digestive.label: DataType.digestive.path
         }
+        
         relative_path = type_path_map.get(self.data_type)
         if relative_path is None:
-            raise ValueError(f"Unknown data_type: {self.data_type}")
+            valid_types = list(type_path_map.keys())
+            raise ValueError(f"Unknown data_type: {self.data_type}. Valid options: {valid_types}")
 
-        return DataType.prefix.path + self.data_source + type_path_map[self.data_type]
-
+        return DataType.prefix.path + self.data_source + relative_path
 
     def get_evaluation_dataset_path_by_data_type(self):
+        """
+        Get the evaluation dataset path for cross-domain scenarios.
+        
+        Returns:
+            str: Full path to the evaluation dataset
+            
+        Raises:
+            ValueError: If evaluation_source is None or data_type is invalid
+        """
         if self.evaluation_source is None:
             raise ValueError("evaluation_source must be provided for cross_domain split type.")
 
@@ -100,15 +121,17 @@ class StrategyCreator:
             DataType.pathway_reduced.label: DataType.pathway_reduced.path,
             DataType.digestive.label: DataType.digestive.path
         }
+        
         relative_path = type_path_map.get(self.data_type)
         if relative_path is None:
-            raise ValueError(f"Unknown data_type for evaluation: {self.data_type}")
+            valid_types = list(type_path_map.keys())
+            raise ValueError(f"Unknown data_type for evaluation: {self.data_type}. Valid options: {valid_types}")
 
         if self.data_type == DataType.l1000_cross_domain.label and self.evaluation_source != self.data_source:
              logging.info(f"Using evaluation_source for l1000_cross_domain: {self.evaluation_source}")
-             return DataType.prefix.path + self.evaluation_source + type_path_map[self.data_type]
+             return DataType.prefix.path + self.evaluation_source + relative_path
 
-        return DataType.prefix.path + self.evaluation_source + type_path_map[self.data_type]
+        return DataType.prefix.path + self.evaluation_source + relative_path
 
     def get_split_strategy(self):
         split_type = self.split_type

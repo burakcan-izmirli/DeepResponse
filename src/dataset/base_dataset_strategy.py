@@ -6,8 +6,29 @@ from abc import ABC, abstractmethod
 
 class BaseDatasetStrategy(ABC):
     def __init__(self, data_path, evaluation_data_path=None):
+        """
+        Initialize base dataset strategy.
+        
+        Args:
+            data_path: Path to the main dataset
+            evaluation_data_path: Optional path to evaluation dataset for cross-domain
+        """
         self.data_path = data_path
         self.evaluation_data_path = evaluation_data_path
+        self._validate_paths()
+
+    def _validate_paths(self):
+        """Validate that dataset paths exist and are accessible."""
+        import os
+        if not os.path.exists(self.data_path):
+            raise FileNotFoundError(f"Dataset path not found: {self.data_path}")
+        
+        if self.evaluation_data_path and not os.path.exists(self.evaluation_data_path):
+            raise FileNotFoundError(f"Evaluation dataset path not found: {self.evaluation_data_path}")
+        
+        logging.info(f"Dataset paths validated: {self.data_path}")
+        if self.evaluation_data_path:
+            logging.info(f"Evaluation dataset path: {self.evaluation_data_path}")
 
     @abstractmethod
     def split_dataset(self, dataset, *args, **kwargs):
