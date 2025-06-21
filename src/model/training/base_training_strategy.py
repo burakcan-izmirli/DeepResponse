@@ -1,11 +1,8 @@
 """ Base training strategy """
 from abc import ABC, abstractmethod
 
-
 class BaseTrainingStrategy(ABC):
-    """ Base training strategy """
-
     @abstractmethod
-    def train_and_evaluate_model(self, model_creation_strategy, dataset_tuple, batch_size, learning_rate, epoch, comet, learning_task_strategy):
+    def train_and_evaluate_model(self, strategy_creator, dataset_input, comet_logger):
         """ Train and evaluate model """
         pass
