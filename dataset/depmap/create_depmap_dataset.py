@@ -179,7 +179,7 @@ def load_and_process_data():
     # Merge data for all cell lines
     merged_df = pd.DataFrame({'cell_line_name': list(all_cell_lines)})
     merged_df['cell_line_features'] = merged_df['cell_line_name'].apply(
-        lambda cell_line: merge_cell_line_data(cell_line))
+        merge_cell_line_data)
 
     return merged_df
 

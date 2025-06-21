@@ -1,7 +1,6 @@
 import os
 import logging
 import tensorflow as tf
-from tensorflow import keras
 from tensorflow.keras.callbacks import ReduceLROnPlateau, ModelCheckpoint, EarlyStopping
 
 from src.model.training.base_training_strategy import BaseTrainingStrategy
@@ -62,7 +61,7 @@ class RandomSplitTrainingStrategy(BaseTrainingStrategy):
         os.makedirs(checkpoint_dir, exist_ok=True)
         return os.path.join(checkpoint_dir, 'model_best.keras')
 
-    class CometMetricsCallback(keras.callbacks.Callback):
+    class CometMetricsCallback(tf.keras.callbacks.Callback):
         def __init__(self, comet_experiment):
             self.comet_experiment = comet_experiment
 
