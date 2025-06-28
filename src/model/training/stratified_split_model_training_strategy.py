@@ -5,6 +5,7 @@ import tensorflow as tf
 from tensorflow.keras.callbacks import ReduceLROnPlateau, ModelCheckpoint, EarlyStopping
 
 from src.model.training.base_training_strategy import BaseTrainingStrategy
+from src.model.training.advanced_schedulers import get_advanced_callbacks, get_scheduler_recommendation
 
 class StratifiedSplitTrainingStrategy(BaseTrainingStrategy):
     def train_and_evaluate_model(self, strategy_creator, dataset_iterator, comet_logger):
@@ -21,6 +22,14 @@ class StratifiedSplitTrainingStrategy(BaseTrainingStrategy):
             dims, train_dataset, valid_dataset, test_dataset, y_test_df = data_fold
             drug_smiles_input_shape, cell_input_shape = dims
 
+            # Log scheduler recommendation
+            scheduler_rec = get_scheduler_recommendation(
+                model_type='hybrid',
+                dataset_size='large',
+                selformer_layers=strategy_creator.selformer_trainable_layers
+            )
+            logging.info(f"Using {scheduler_rec['type']} scheduler: {scheduler_rec['reason']}")
+
             model = model_creation_strategy.create_model(
                 drug_input_shape=drug_smiles_input_shape,
                 cell_input_shape=cell_input_shape,
@@ -30,7 +39,19 @@ class StratifiedSplitTrainingStrategy(BaseTrainingStrategy):
             learning_task_strategy.compile_model(model, strategy_creator.learning_rate)
 
             checkpoint_path = self._get_checkpoint_path(strategy_creator, fold_idx)
-            callbacks = self._get_callbacks(checkpoint_path, comet_logger)
+            
+            # Calculate steps per epoch for advanced schedulers
+            steps_per_epoch = self._calculate_steps_per_epoch(train_dataset, strategy_creator.batch_size)
+            
+            # Use advanced callbacks instead of basic ones
+            callbacks = get_advanced_callbacks(
+                strategy_creator, 
+                checkpoint_path, 
+                steps_per_epoch, 
+                comet_logger
+            )
+
+            logging.info(f"Training with {len(callbacks)} advanced callbacks including {scheduler_rec['type']} scheduler")
 
             history = model.fit(
                 train_dataset,
@@ -40,7 +61,14 @@ class StratifiedSplitTrainingStrategy(BaseTrainingStrategy):
                 verbose=2
             )
 
-            model.load_weights(checkpoint_path)
+            # Load best model weights
+            best_model_path = checkpoint_path.replace('.h5', '_best_val.h5')
+            if os.path.exists(best_model_path):
+                model.load_weights(best_model_path)
+                logging.info(f"Loaded best model from {best_model_path}")
+            else:
+                model.load_weights(checkpoint_path)
+
             y_pred = model.predict(test_dataset)
             fold_metrics = learning_task_strategy.evaluate_model(y_test_df, y_pred, comet_logger)
             all_fold_results.append(fold_metrics)
@@ -51,12 +79,21 @@ class StratifiedSplitTrainingStrategy(BaseTrainingStrategy):
 
         self._log_final_cv_results(all_fold_results, comet_logger)
 
-    def _get_callbacks(self, checkpoint_path, comet_experiment):
-        return [
-            ModelCheckpoint(filepath=checkpoint_path, save_best_only=True, monitor='val_loss', mode='min'),
-            ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=5, min_lr=1e-6),
-            EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True),
-        ]
+    def _calculate_steps_per_epoch(self, train_dataset, batch_size):
+        """Calculate steps per epoch for the training dataset."""
+        try:
+            # Try to get dataset size from cardinality
+            dataset_size = tf.data.experimental.cardinality(train_dataset).numpy()
+            if dataset_size == tf.data.experimental.UNKNOWN_CARDINALITY:
+                # Fallback: estimate based on iteration
+                steps = 0
+                for _ in train_dataset.take(100):  # Sample to estimate
+                    steps += 1
+                return max(steps * 10, 1000)  # Rough estimate
+            return max(dataset_size, 1000)
+        except:
+            # Fallback for any errors
+            return 1000
 
     def _get_checkpoint_path(self, strategy_creator, fold_idx):
         prefix = "selformer_cnn"
