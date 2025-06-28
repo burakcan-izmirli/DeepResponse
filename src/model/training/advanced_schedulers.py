@@ -126,7 +126,7 @@ def get_advanced_callbacks(strategy_creator, checkpoint_path, steps_per_epoch, c
     min_lr = max_lr / 100  # Minimum learning rate
     total_epochs = args.epoch
     
-    # Auto-select scheduler based on model configuration (simplified)
+    # Auto-select scheduler based on model configuration
     if args.selformer_trainable_layers > 0:
         scheduler_type = 'onecycle'  # Fine-tuning scenario
     else:
