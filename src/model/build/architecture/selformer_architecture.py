@@ -9,7 +9,6 @@ class SELFormerLayer(tf.keras.layers.Layer):
         self.model_name = model_name
         self.max_length = max_length
         self.num_trainable_encoder_layers = num_trainable_encoder_layers
-        logging.info(f"Initializing SELFormerLayer: model='{self.model_name}', trainable_encoder_layers={self.num_trainable_encoder_layers}")
         
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         self.transformer = TFAutoModel.from_pretrained(self.model_name, from_pt=True)
@@ -24,7 +23,6 @@ class SELFormerLayer(tf.keras.layers.Layer):
             self.transformer.trainable = True
             for layer in self.transformer.roberta.encoder.layer[:-self.num_trainable_encoder_layers]:
                 layer.trainable = False
-        logging.info(f"SELFormer transformer is trainable: {self.transformer.trainable}")
 
     def call(self, inputs, training=None):
         
