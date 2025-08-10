@@ -3,7 +3,7 @@ import logging
 import matplotlib.pyplot as plt
 
 
-def sketch_scatter_plot(true_values, predictions, comet):
+def sketch_scatter_plot(true_values, predictions, comet, filename_prefix=""):
     """
     This function creates a scatter plot of true values versus predictions.
     The color of each point represents the squared error between the true value and the prediction.
@@ -11,6 +11,7 @@ def sketch_scatter_plot(true_values, predictions, comet):
     Parameters:
     true_values (list): A list of true values.
     predictions (list): A list of predicted values.
+    filename_prefix (str): Prefix for the output filename to make it unique.
 
     Returns:
     None
@@ -36,20 +37,22 @@ def sketch_scatter_plot(true_values, predictions, comet):
     # Add a color bar
     plt.colorbar(label='Squared Error')
 
-    # Save the plot as a PNG file
-    plt.savefig('scatter_plot.png')
+    # Save the plot as a PNG file with dynamic filename
+    filename = f'{filename_prefix}scatter_plot.png' if filename_prefix else 'scatter_plot.png'
+    plt.savefig(filename)
 
     if comet is not None:
-        comet.log_image('scatter_plot.png')
+        comet.log_image(filename)
 
 
-def sketch_histogram(true_values, predictions, comet):
+def sketch_histogram(true_values, predictions, comet, filename_prefix=""):
     """
     This function creates two histograms in the same figure, one for the true values and one for the predictions.
 
     Parameters:
     true_values (list): A list of true values.
     predictions (list): A list of predicted values.
+    filename_prefix (str): Prefix for the output filename to make it unique.
 
     Returns:
     None
@@ -85,19 +88,20 @@ def sketch_histogram(true_values, predictions, comet):
     axs[0].set_ylim(min_ylim, max_ylim)
     axs[1].set_ylim(min_ylim, max_ylim)
 
-    # Save the plot as a PNG file
-    plt.savefig('histogram.png')
+    # Save the plot as a PNG file with dynamic filename
+    filename = f'{filename_prefix}histogram.png' if filename_prefix else 'histogram.png'
+    plt.savefig(filename)
 
     if comet is not None:
-        comet.log_image('histogram.png')
+        comet.log_image(filename)
 
 
-def visualize_results(true_values, predictions, comet):
+def visualize_results(true_values, predictions, comet, filename_prefix=""):
     """ Main function to visualize the results """
     # Calculate min_val and max_val
 
-    sketch_scatter_plot(true_values, predictions, comet)
-    sketch_histogram(true_values, predictions, comet)
+    sketch_scatter_plot(true_values, predictions, comet, filename_prefix)
+    sketch_histogram(true_values, predictions, comet, filename_prefix)
 
     logging.info("Visualize the results was performed.")
 
