@@ -4,6 +4,7 @@ import tensorflow as tf
 from tensorflow.keras.callbacks import ReduceLROnPlateau, ModelCheckpoint, EarlyStopping
 
 from src.model.training.base_training_strategy import BaseTrainingStrategy
+from src.model.training.advanced_schedulers import get_advanced_callbacks, get_scheduler_recommendation
 
 class RandomSplitTrainingStrategy(BaseTrainingStrategy):
     def train_and_evaluate_model(self, strategy_creator, dataset_input, comet_logger):
@@ -22,6 +23,14 @@ class RandomSplitTrainingStrategy(BaseTrainingStrategy):
             dims, train_dataset, valid_dataset, test_dataset, y_test_df = dataset_input
             drug_smiles_input_shape, cell_input_shape = dims
 
+            # Log scheduler recommendation
+            scheduler_rec = get_scheduler_recommendation(
+                model_type='hybrid',
+                dataset_size='large',
+                selformer_layers=strategy_creator.selformer_trainable_layers
+            )
+            logging.info(f"Using {scheduler_rec['type']} scheduler: {scheduler_rec['reason']}")
+
             logging.info("Creating model...")
             model = model_creation_strategy.create_model(
                 drug_input_shape=drug_smiles_input_shape,
@@ -32,9 +41,18 @@ class RandomSplitTrainingStrategy(BaseTrainingStrategy):
             learning_task_strategy.compile_model(model, strategy_creator.learning_rate)
 
             checkpoint_path = self._get_checkpoint_path(strategy_creator)
-            callbacks = self._get_callbacks(checkpoint_path, comet_logger)
+            
+            # Calculate steps per epoch for advanced schedulers
+            steps_per_epoch = self._calculate_steps_per_epoch(train_dataset, strategy_creator.batch_size)
+            
+            # Use advanced callbacks instead of basic ones
+            callbacks = get_advanced_callbacks(
+                strategy_creator, 
+                checkpoint_path, 
+                steps_per_epoch, 
+                comet_logger
+            )
 
-            logging.info(f"Starting training for {strategy_creator.epoch} epochs...")
             model.fit(
                 train_dataset,
                 epochs=strategy_creator.epoch,
@@ -43,16 +61,28 @@ class RandomSplitTrainingStrategy(BaseTrainingStrategy):
                 verbose=2
             )
 
-            # Verify checkpoint exists before loading
-            if not os.path.exists(checkpoint_path):
-                logging.warning(f"Checkpoint not found at {checkpoint_path}. Using current model weights.")
-            else:
+            # Load best model weights
+            best_model_path = checkpoint_path.replace('.keras', '_best_val.h5')
+            if os.path.exists(best_model_path):
+                model.load_weights(best_model_path)
+                logging.info(f"Loaded best model from {best_model_path}")
+            elif os.path.exists(checkpoint_path):
                 logging.info("Loading best model for evaluation...")
                 model.load_weights(checkpoint_path)
+            else:
+                logging.warning(f"No checkpoint found. Using current model weights.")
 
             logging.info("Evaluating model on the test set...")
             y_pred = model.predict(test_dataset, verbose=0)
-            learning_task_strategy.evaluate_model(y_test_df, y_pred, comet_logger)
+            
+            # Create experiment context for dynamic filenames
+            experiment_context = {
+                'split_type': strategy_creator.split_type,
+                'selformer_trainable_layers': strategy_creator.selformer_trainable_layers,
+                'data_source': strategy_creator.data_source
+            }
+            
+            learning_task_strategy.evaluate_model(y_test_df, y_pred, comet_logger, experiment_context)
             
             logging.info("Training and evaluation completed successfully.")
             
@@ -63,15 +93,21 @@ class RandomSplitTrainingStrategy(BaseTrainingStrategy):
             # Clean up TensorFlow session
             tf.keras.backend.clear_session()
 
-    def _get_callbacks(self, checkpoint_path, comet_experiment):
-        callbacks = [
-            ModelCheckpoint(filepath=checkpoint_path, save_best_only=True, monitor='val_loss', mode='min', save_weights_only=True),
-            ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=5, min_lr=1e-6, verbose=1),
-            EarlyStopping(monitor='val_loss', patience=10)
-        ]
-        if comet_experiment:
-            callbacks.append(self.CometMetricsCallback(comet_experiment))
-        return callbacks
+    def _calculate_steps_per_epoch(self, train_dataset, batch_size):
+        """Calculate steps per epoch for the training dataset."""
+        try:
+            # Try to get dataset size from cardinality
+            dataset_size = tf.data.experimental.cardinality(train_dataset).numpy()
+            if dataset_size == tf.data.experimental.UNKNOWN_CARDINALITY:
+                # Fallback: estimate based on iteration
+                steps = 0
+                for _ in train_dataset.take(100):  # Sample to estimate
+                    steps += 1
+                return max(steps * 10, 1000)  # Rough estimate
+            return max(dataset_size, 1000)
+        except:
+            # Fallback for any errors
+            return 1000
 
     def _get_checkpoint_path(self, strategy_creator):
         prefix = "selformer_cnn"

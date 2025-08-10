@@ -68,7 +68,6 @@ class StrategyCreator:
     def selformer_trainable_layers(self):
         return self.args.selformer_trainable_layers
 
-
     def get_comet_strategy(self):
         strategies = { True: UseCometStrategy(), False: SkipCometStrategy() }
         return strategies[self.use_comet]

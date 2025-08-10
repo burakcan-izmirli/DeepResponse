@@ -4,7 +4,9 @@ from tensorflow import keras
 from tensorflow.keras import layers, regularizers, Model
 import logging
 
-from src.model.build.selformer.selformer_embeddings import SELFormerLayer
+from src.model.build.architecture.selformer_architecture import SELFormerLayer
+from src.model.build.architecture.cnn_architecture import create_enhanced_conv_model
+from src.model.build.architecture.mlp_architecture import create_enhanced_mlp_model
 
 class BaseModelCreationStrategy(ABC):
     @abstractmethod
@@ -19,23 +21,14 @@ class BaseModelCreationStrategy(ABC):
         return Model(inputs=drug_input, outputs=drug_embedding, name="selformer_network")
 
     def create_conv_model(self, cell_line_dims):
-        input_shape_cnn = (cell_line_dims[0], cell_line_dims[1], 1)
-        logging.info(f"Creating CNN branch with input shape: {input_shape_cnn}")
-
-        input_layer = layers.Input(shape=input_shape_cnn, name="cell_line_input")
-
-        x = layers.Conv2D(32, (1, 5), activation='relu')(input_layer)
-        x = layers.GlobalMaxPooling2D()(x)
-
-        return Model(inputs=input_layer, outputs=x, name="cnn_network")
+        """Create CNN model for cell line feature extraction with multi-scale convolutions and attention pooling"""
+        return create_enhanced_conv_model(cell_line_dims)
 
     def create_model(self,
                      drug_input_shape,
                      cell_input_shape,
                      final_mlp_dense_units=1024,
                      selformer_trainable_layers=-1):
-
-        logging.info("Creating SELFormer+CNN model (no attention fusion)")
 
         if drug_input_shape is None or drug_input_shape != ():
              logging.warning(f"drug_input_shape was {drug_input_shape}, expected (). Overriding.")
@@ -50,8 +43,9 @@ class BaseModelCreationStrategy(ABC):
 
         concatenated = layers.Concatenate(axis=1)([drug_network.output, conv_network.output])
 
-        final_output = self.create_mlp_model(final_mlp_dense_units, concatenated)
+        # Use MLP for final prediction
+        final_output = create_enhanced_mlp_model(final_mlp_dense_units, concatenated)
 
         model = Model(inputs=[drug_network.input, conv_network.input], outputs=final_output)
-        logging.info("Final model created.")
+        logging.info("Model created successfully.")
         return model
