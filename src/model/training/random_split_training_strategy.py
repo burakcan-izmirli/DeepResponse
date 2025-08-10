@@ -74,7 +74,15 @@ class RandomSplitTrainingStrategy(BaseTrainingStrategy):
 
             logging.info("Evaluating model on the test set...")
             y_pred = model.predict(test_dataset, verbose=0)
-            learning_task_strategy.evaluate_model(y_test_df, y_pred, comet_logger)
+            
+            # Create experiment context for dynamic filenames
+            experiment_context = {
+                'split_type': strategy_creator.split_type,
+                'selformer_trainable_layers': strategy_creator.selformer_trainable_layers,
+                'data_source': strategy_creator.data_source
+            }
+            
+            learning_task_strategy.evaluate_model(y_test_df, y_pred, comet_logger, experiment_context)
             
             logging.info("Training and evaluation completed successfully.")
             

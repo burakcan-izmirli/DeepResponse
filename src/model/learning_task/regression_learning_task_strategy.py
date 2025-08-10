@@ -9,6 +9,67 @@ from src.model.learning_task.base_learning_task_strategy import BaseLearningTask
 from sklearn.metrics import r2_score
 
 
+class SafeR2Score(tf.keras.metrics.Metric):
+    """
+    Custom R² score metric that handles edge cases gracefully.
+    Prevents NaN values by checking variance prerequisites.
+    """
+    
+    def __init__(self, name='r2_score', **kwargs):
+        super(SafeR2Score, self).__init__(name=name, **kwargs)
+        self.total_sum_squares = self.add_weight(name='total_sum_squares', initializer='zeros')
+        self.residual_sum_squares = self.add_weight(name='residual_sum_squares', initializer='zeros')
+        self.sum_y_true = self.add_weight(name='sum_y_true', initializer='zeros')
+        self.count = self.add_weight(name='count', initializer='zeros')
+
+    def update_state(self, y_true, y_pred, sample_weight=None):
+        """Update the metric state with new batch of data."""
+        y_true = tf.cast(y_true, self._dtype)
+        y_pred = tf.cast(y_pred, self._dtype)
+        
+        if sample_weight is not None:
+            sample_weight = tf.cast(sample_weight, self._dtype)
+            y_true = tf.multiply(y_true, sample_weight)
+            y_pred = tf.multiply(y_pred, sample_weight)
+
+        # Update counts and sums
+        batch_count = tf.cast(tf.size(y_true), self._dtype)
+        self.count.assign_add(batch_count)
+        self.sum_y_true.assign_add(tf.reduce_sum(y_true))
+        
+        # Calculate mean on the fly to avoid numerical issues
+        y_mean = self.sum_y_true / tf.maximum(self.count, 1e-8)
+        
+        # Update sum of squares
+        self.total_sum_squares.assign_add(tf.reduce_sum(tf.square(y_true - y_mean)))
+        self.residual_sum_squares.assign_add(tf.reduce_sum(tf.square(y_true - y_pred)))
+
+    def result(self):
+        """Calculate R² score with safety checks."""
+        
+        # Check if we have enough samples and variance
+        safe_tss = tf.maximum(self.total_sum_squares, 1e-8)
+        
+        # Calculate R²
+        r2 = 1.0 - (self.residual_sum_squares / safe_tss)
+        
+        # Check for undefined conditions
+        is_undefined = tf.logical_or(
+            tf.less(self.count, 2.0),  # Less than 2 samples
+            tf.less(self.total_sum_squares, 1e-8)  # No variance in targets
+        )
+        
+        # Return -999 as sentinel value for undefined cases, otherwise R²
+        return tf.where(is_undefined, -999.0, r2)
+
+    def reset_state(self):
+        """Reset all metric states."""
+        self.total_sum_squares.assign(0.0)
+        self.residual_sum_squares.assign(0.0)
+        self.sum_y_true.assign(0.0)
+        self.count.assign(0.0)
+
+
 class RegressionLearningTaskStrategy(BaseLearningTaskStrategy):
     """ Strategy for regression learning tasks. """
 
@@ -16,14 +77,12 @@ class RegressionLearningTaskStrategy(BaseLearningTaskStrategy):
         return tf.keras.losses.Huber()
 
     def get_metrics(self):
-        def r2(y_true, y_pred):
-            return tf.py_function(r2_score, (y_true, y_pred), tf.double)
-        r2.__name__ = 'r2_score'
+        """Get metrics for regression with safe R² calculation."""
         return [
             tf.keras.metrics.MeanSquaredError(name='mse'),
             tf.keras.metrics.RootMeanSquaredError(name='rmse'),
             tf.keras.metrics.MeanAbsoluteError(name='mae'),
-            r2
+            SafeR2Score(name='r2_score')
         ]
 
     def process_targets(self, y):
@@ -53,7 +112,7 @@ class RegressionLearningTaskStrategy(BaseLearningTaskStrategy):
             logging.error(f"Failed to compile regression model: {e}")
             raise
 
-    def evaluate_model(self, y_true, y_pred, comet=None):
+    def evaluate_model(self, y_true, y_pred, comet=None, experiment_context=None):
         """ Evaluates the regression model and logs metrics. """
         if isinstance(y_true, (pd.DataFrame, pd.Series)):
             y_true = y_true.to_numpy()
@@ -84,4 +143,19 @@ class RegressionLearningTaskStrategy(BaseLearningTaskStrategy):
                 "Matthew's Correlation Coef": metrics["Matthew's Correlation Coef"]
             })
 
-        visualize_results(y_true, y_pred, comet)
+        # Generate dynamic filename prefix based on experiment context
+        filename_prefix = ""
+        if experiment_context:
+            split_type = experiment_context.get('split_type', 'unknown')
+            trainable_layers = experiment_context.get('selformer_trainable_layers', 'unknown')
+            data_source = experiment_context.get('data_source', 'unknown')
+            fold_idx = experiment_context.get('fold_idx', '')
+            
+            filename_prefix = f"{data_source}_{split_type}_stl{trainable_layers}"
+            if fold_idx != '':
+                filename_prefix += f"_fold{fold_idx}"
+            filename_prefix += "_"
+
+        visualize_results(y_true, y_pred, comet, filename_prefix)
+        
+        return metrics

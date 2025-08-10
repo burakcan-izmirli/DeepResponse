@@ -23,16 +23,20 @@ class CosineAnnealingWithWarmup(tf.keras.callbacks.Callback):
         self.total_steps = total_epochs * steps_per_epoch
         
     def on_batch_begin(self, batch, logs=None):
-        current_step = self.model.optimizer.iterations.numpy()
+        current_step = int(self.model.optimizer.iterations.numpy())
         
-        if current_step < self.warmup_steps:
+        if current_step < self.warmup_steps and self.warmup_steps > 0:
             # Linear warmup
             lr = self.max_lr * (current_step / self.warmup_steps)
-        else:
+        elif self.total_steps > self.warmup_steps:
             # Cosine annealing
             progress = (current_step - self.warmup_steps) / (self.total_steps - self.warmup_steps)
             lr = self.min_lr + (self.max_lr - self.min_lr) * 0.5 * (1 + np.cos(np.pi * progress))
+        else:
+            lr = self.max_lr
             
+        # Ensure lr is a float and within reasonable bounds
+        lr = max(float(lr), 1e-8)
         tf.keras.backend.set_value(self.model.optimizer.learning_rate, lr)
 
 class OneCycleLR(tf.keras.callbacks.Callback):
@@ -57,19 +61,23 @@ class OneCycleLR(tf.keras.callbacks.Callback):
         self.step_down_size = total_steps - self.step_up_size
         
     def on_batch_begin(self, batch, logs=None):
-        current_step = self.model.optimizer.iterations.numpy()
+        current_step = int(self.model.optimizer.iterations.numpy())
         
-        if current_step <= self.step_up_size:
+        if current_step <= self.step_up_size and self.step_up_size > 0:
             # Increase phase
             lr = self.initial_lr + (self.max_lr - self.initial_lr) * (current_step / self.step_up_size)
         else:
             # Decrease phase
             step_down = current_step - self.step_up_size
-            if self.anneal_strategy == 'cos':
+            if self.anneal_strategy == 'cos' and self.step_down_size > 0:
                 lr = self.min_lr + (self.max_lr - self.min_lr) * 0.5 * (1 + math.cos(math.pi * step_down / self.step_down_size))
-            else:  # linear
+            elif self.step_down_size > 0:  # linear
                 lr = self.max_lr - (self.max_lr - self.min_lr) * (step_down / self.step_down_size)
+            else:
+                lr = self.min_lr
                 
+        # Ensure lr is a float and within reasonable bounds
+        lr = max(float(lr), 1e-8)
         tf.keras.backend.set_value(self.model.optimizer.learning_rate, lr)
 
 class PerformanceMonitor(tf.keras.callbacks.Callback):

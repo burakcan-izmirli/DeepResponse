@@ -51,7 +51,7 @@ class ClassificationLearningTaskStrategy(BaseLearningTaskStrategy):
             logging.error(f"Failed to compile classification model: {e}")
             raise
 
-    def evaluate_model(self, y_true, y_pred, comet=None):
+    def evaluate_model(self, y_true, y_pred, comet=None, experiment_context=None):
         """Evaluates the classification model and logs metrics."""
         y_true_b = self.process_targets(y_true)
         y_pred_b = (y_pred > 0.5).astype(int)
@@ -67,3 +67,5 @@ class ClassificationLearningTaskStrategy(BaseLearningTaskStrategy):
         logging.info(f"Evaluation metrics: {metrics}")
         if comet:
             comet.log_metrics(metrics)
+            
+        return metrics
