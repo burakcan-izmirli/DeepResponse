@@ -96,6 +96,10 @@ class BaseDatasetStrategy(ABC):
         drug_smiles = np.array(x_data_filtered['drug_name'].map(drug_smiles_lookup).tolist())
         targets = y_data_filtered.values.astype(np.float32)
 
+        # Ensure targets have the correct shape
+        if targets.ndim == 1:
+            targets = targets.reshape(-1, 1)
+
         # Create TensorFlow dataset
         dataset = tf.data.Dataset.from_tensor_slices((
             (drug_smiles, cell_features),
