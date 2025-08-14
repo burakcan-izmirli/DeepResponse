@@ -60,6 +60,16 @@ def argument_parser():
                         default=DefaultArguments.selformer_trainable_layers.value,
                         type=int, help="Number of trainable layers in SELFormer (-1 for all, 0 for frozen, >0 for specific count)")
 
+    # Staged unfreezing & optimization flags
+    parser.add_argument('--unfreeze_epoch', default=DefaultArguments.unfreeze_epoch.value, type=int,
+                        help='Epoch at which to unfreeze top SELFormer layers (-1 to disable)')
+    parser.add_argument('--unfreeze_layers', default=DefaultArguments.unfreeze_layers.value, type=int,
+                        help='Number of top encoder layers to unfreeze at unfreeze_epoch')
+    parser.add_argument('--unfreeze_lr_factor', default=DefaultArguments.unfreeze_lr_factor.value, type=float,
+                        help='Learning rate factor applied to base LR after unfreezing (multiplied)')
+    parser.add_argument('--cache_datasets', default=DefaultArguments.cache_datasets.value, type=lambda x: (str(x).lower()=='true'),
+                        help='Cache preprocessed tf.data datasets in memory for speed')
+
     args = parser.parse_args()
     _validate_parsed_args(args)
     return args
@@ -87,6 +97,13 @@ def _validate_parsed_args(args):
     
     if args.random_state < 0:
         raise ValueError(f"Random state must be non-negative, got: {args.random_state}")
+
+    if args.unfreeze_epoch >= 0 and args.unfreeze_epoch >= args.epoch:
+        raise ValueError('unfreeze_epoch must be less than total epochs or -1 to disable.')
+    if args.unfreeze_layers < 0:
+        raise ValueError('unfreeze_layers must be >= 0')
+    if args.unfreeze_lr_factor <= 0:
+        raise ValueError('unfreeze_lr_factor must be > 0')
     
     # Validate cross-domain configuration
     if args.split_type == 'cross_domain' and args.evaluation_source is None:

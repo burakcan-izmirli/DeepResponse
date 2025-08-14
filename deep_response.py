@@ -12,6 +12,7 @@ import os
 import time
 from argparse import Namespace
 from contextlib import contextmanager
+from comet_ml import Experiment
 
 from helper.argument_parser import argument_parser
 from helper.seed_setter import set_seed
@@ -21,6 +22,17 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(name)s:%(asctime)s:%(message)s')
 logging.getLogger('tensorflow').setLevel(logging.ERROR)
 
+# Enable mixed precision for performance if GPU supports it
+try:
+    import tensorflow as tf
+    try:
+        from tensorflow.keras import mixed_precision  
+    except Exception:
+        from keras import mixed_precision  # type: ignore  # fallback for some TF versions
+    mixed_precision.set_global_policy('mixed_float16')
+    logging.info('Mixed precision enabled (float16).')
+except Exception as e:
+    logging.warning(f'Could not enable mixed precision: {e}')
 
 class DeepResponse:
     def __init__(self, args: Namespace):
@@ -98,9 +110,16 @@ class DeepResponse:
         - Epochs: {args.epoch}
         - Batch Size: {args.batch_size}
         - Random State: {args.random_state}
+        - Mixed Precision: True
         
         Model Parameters:
         - SELFormer Trainable Layers: {args.selformer_trainable_layers}
+        - Staged Unfreeze Epoch: {args.unfreeze_epoch}
+        - Unfreeze Layers: {args.unfreeze_layers}
+        - Unfreeze LR Factor: {args.unfreeze_lr_factor}
+        
+        Pipeline:
+        - Cache Datasets: {args.cache_datasets}
         
         Logging:
         - Use Comet: {args.use_comet}
