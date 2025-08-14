@@ -4,6 +4,8 @@ Advanced learning rate schedulers for improved training performance.
 import tensorflow as tf
 import numpy as np
 import math
+import logging
+from src.model.build.architecture.selformer_architecture import SELFormerLayer  # added for type detection
 
 class CosineAnnealingWithWarmup(tf.keras.callbacks.Callback):
     """
@@ -116,6 +118,59 @@ class PerformanceMonitor(tf.keras.callbacks.Callback):
         if self.stopped_epoch > 0:
             print(f'\nEpoch {self.stopped_epoch + 1}: early stopping')
 
+class StagedUnfreezeCallback(tf.keras.callbacks.Callback):
+    """Dynamically unfreeze top transformer layers at a specified epoch with differential LR."""
+    def __init__(self, unfreeze_epoch, unfreeze_layers, lr_factor, comet_experiment=None):
+        super().__init__()
+        self.unfreeze_epoch = unfreeze_epoch
+        self.unfreeze_layers = unfreeze_layers
+        self.lr_factor = lr_factor
+        self.comet_experiment = comet_experiment
+        self.has_unfroze = False
+
+    def on_epoch_begin(self, epoch, logs=None):
+        if self.unfreeze_epoch < 0 or self.has_unfroze:
+            return
+        if epoch >= self.unfreeze_epoch:
+            transformer = None
+            # Locate SELFormerLayer inside the nested selformer_network model
+            for layer in self.model.layers:
+                if layer.name == 'selformer_network':
+                    for sub in getattr(layer, 'layers', []):
+                        if isinstance(sub, SELFormerLayer):
+                            transformer = sub.transformer
+                            break
+                if transformer is not None:
+                    break
+            # Fallback: search any layer exposing .transformer
+            if transformer is None:
+                for l in self.model.layers:
+                    if hasattr(l, 'transformer'):
+                        transformer = l.transformer
+                        break
+            if transformer is None:
+                logging.warning('StagedUnfreezeCallback: transformer backbone not found.')
+                return
+            encoder_layers = transformer.roberta.encoder.layer
+            n = min(self.unfreeze_layers, len(encoder_layers))
+            if n <= 0:
+                logging.info('StagedUnfreezeCallback: no layers to unfreeze (n<=0).')
+                return
+            # Freeze all first
+            for enc in encoder_layers:
+                enc.trainable = False
+            # Unfreeze top n
+            for enc in encoder_layers[-n:]:
+                enc.trainable = True
+            old_lr = float(tf.keras.backend.get_value(self.model.optimizer.learning_rate))
+            new_lr = old_lr * self.lr_factor
+            tf.keras.backend.set_value(self.model.optimizer.learning_rate, new_lr)
+            logging.info(f"Staged unfreezing applied at epoch {epoch}: unfroze top {n} layers. LR {old_lr:.2e} -> {new_lr:.2e}")
+            if self.comet_experiment:
+                self.comet_experiment.log_metrics({'unfreeze_epoch': epoch, 'post_unfreeze_lr': new_lr, 'unfrozen_layers': n})
+            self.has_unfroze = True
+
+
 def get_advanced_callbacks(strategy_creator, checkpoint_path, steps_per_epoch, comet_logger=None):
     """
     Create advanced callbacks for improved training performance.
@@ -161,6 +216,15 @@ def get_advanced_callbacks(strategy_creator, checkpoint_path, steps_per_epoch, c
             warmup_epochs=warmup_epochs,
             total_epochs=total_epochs,
             steps_per_epoch=steps_per_epoch
+        ))
+    
+    # Insert staged unfreezing if configured and backbone initially frozen or partially trainable
+    if args.unfreeze_epoch >= 0 and args.unfreeze_layers > 0:
+        callbacks.append(StagedUnfreezeCallback(
+            unfreeze_epoch=args.unfreeze_epoch,
+            unfreeze_layers=args.unfreeze_layers,
+            lr_factor=args.unfreeze_lr_factor,
+            comet_experiment=comet_logger
         ))
     
     # Enhanced model checkpointing
