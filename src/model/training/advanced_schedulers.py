@@ -5,7 +5,7 @@ import tensorflow as tf
 import numpy as np
 import math
 import logging
-from src.model.build.architecture.selformer_architecture import SELFormerLayer  # added for type detection
+from src.model.build.architecture.selformer_architecture import SELFormerLayer 
 
 class CosineAnnealingWithWarmup(tf.keras.callbacks.Callback):
     """
