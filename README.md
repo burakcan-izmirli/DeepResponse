@@ -8,16 +8,20 @@
 
   Assessing the best treatment option for each patient is the main goal of precision medicine. Patients with the same diagnosis may display varying sensitivity to the applied treatment due to genetic heterogeneity, especially in cancers. 
   
-  Here, we propose DeepResponse, a machine learning-based system that predicts drug responses (sensitivity) of cancer cells. DeepResponse employs multi-omics profiles of different cancer cell-lines obtained from large-scale screening projects, together with drugs’ molecular features at the input level, and processing them via hybrid convolutional and graph-transformer deep neural networks to learn the relationship between multi-omics features of the tumour and its sensitivity to the administered drug. 
+  Here, we propose DeepResponse, a machine learning-based system that predicts drug responses (sensitivity) of cancer cells. DeepResponse employs multi-omics profiles of different cancer cell-lines obtained from large-scale screening projects, together with drugs’ molecular features at the input level, and processes them via a hybrid convolutional (cell encoder) and transformer-based (drug encoder) neural network to learn the relationship between tumour multi-omics features and sensitivity to the administered drug.
   
   Both the performance results and in vitro validation experiments indicated DeepResponse successfully predicts drug sensitivity of cancer cells, and especially the multi-omics aspect benefited the learning process and yielded better performance compared to the state-of-the-art. DeepResponse can be used for early-stage discovery of new drug candidates and for repurposing the existing ones against resistant tumours.
 
 
 ## Architecture
 
+This repository implements a hybrid architecture consisting of a **SELFormer-based drug encoder**, an **enhanced CNN cell-line encoder**, and an **MLP prediction head**:
+
 <img width="1500" alt="Architecture of DeepResponse" src="https://github.com/burakcan-izmirli/DeepResponse/assets/65293991/97a7fd5c-28ae-43b8-977d-9503f2627abd">
 
 **Figure 1.** Hybrid deep convolutional and graph neural network (HDCGNN) architecture of DeepResponse. Multi-omic features of cell lines are processed via deep convolutional neural networks, whereas graph represented drug molecules are proessed by message passing networks containing transformer encoder layers.
+
+Implementation references: `src/dataset/base_dataset_strategy.py`, `src/model/build/base_model_build_strategy.py`, `src/model/build/architecture/selformer_architecture.py`.
 
 
 ## Results
@@ -35,11 +39,13 @@ For the other devices, you can install ```Anaconda``` or ```Miniconda```.
 
 *  Please check the prefix field in environment files and change it based on your installation type and directory.
 
-2.  You need to download datasets [here](https://drive.google.com/drive/folders/1xfcCyPMVGzhtBxrfv3VtTyCqsOG9oRQk?usp=sharing).
+2.  Datasets are stored under `dataset/<source>/`:
+    - Raw inputs: `dataset/<source>/raw/`
+    - Processed artifacts used for training: `dataset/<source>/processed/`
 
-*  Do not change naming and folder structure. You should put the ```data``` folder at the same level as the ```src``` folder.
+    Download link (Google Drive): [Google Drive folder](https://drive.google.com/drive/folders/1xfcCyPMVGzhtBxrfv3VtTyCqsOG9oRQk?usp=sharing)
 
-*  If you'd like to get ready-to-use datasets, you can only download ```data/processed``` folder. However, if you'd like to get raw data and create the dataset from scratch you need to download ```data/raw```.
+    You can either download ready-to-use processed datasets or place the raw files under `dataset/<source>/raw/` and generate the processed artifacts locally (see “Dataset Creation”).
 
 3.  Execute the following commands with the appropriate environment file for your operating system. 
 
@@ -64,21 +70,33 @@ python3 -m deep_response --help
 ```
 An example of a running statement with all parameters:
 ```
-python3 -m deep_response --use_comet True --data_source 'gdsc' --evaluation_source 'ccle' --data_type 'l1000' --split_type 'random' --random_state 28 --batch_size 64 --epoch 50 --learning_rate 0.01
+python3 -m deep_response --use_comet True --data_source 'gdsc' --evaluation_source 'ccle' --data_type 'normal' --split_type 'random' --random_state 28 --batch_size 64 --epoch 50 --learning_rate 0.01
 ```
 
-## Parameter Compliance Matrix
+## Dataset Creation
 
-| Data Source | Evaluation Source | Data Type                                              | Split Type                                                           |
-|-------------|-------------------|--------------------------------------------------------|----------------------------------------------------------------------|
-| `gdsc`      | `None`            | `[normal, l1000, pathway, pathway_reduced, digestive]` | `[random, cell_stratified,  drug_stratified,  drug_cell_stratified]` |
-| `gdsc`      | `ccle`            | `[normal, l1000]`                                      | `[cross_domain]`                                                     |
-| `gdsc`      | `nci_60`          | `[normal, l1000]`                                      | `[cross_domain]`                                                     |
-| `gdsc`      | `ccle`            | `[normal, l1000]`                                      | `[cross_domain]`                                                     |
-| `ccle`      | `None`            | `[normal, l1000]`                                      | `[random, cell_stratified,  drug_stratified,  drug_cell_stratified]` |
-| `ccle`      | `nci_60`          | `[normal, l1000]`                                      | `[cross_domain]`                                                     |
-| `ccle`      | `gdsc`            | `[normal, l1000]`                                      | `[cross_domain]`                                                     |
+If you have placed the required raw files under `dataset/<source>/raw/`, you can regenerate the processed artifacts via:
 
+```
+python3 -m dataset.depmap.create_depmap_dataset
+python3 -m dataset.ccle.create_ccle_dataset
+python3 -m dataset.gdsc.create_gdsc_dataset
+```
+
+Each script writes outputs under `dataset/<source>/processed/` (including `dataset_records.csv` and `cell_features_lookup.npz`).
+
+## Supported Configurations
+
+DeepResponse supports the following high-level CLI configuration rules:
+
+- `--split_type`: `random`, `cell_stratified`, `drug_stratified`, `drug_cell_stratified`, `cross_domain`
+- `--data_type`: currently `normal`
+- `--data_source`: any dataset source that has processed artifacts available under `dataset/<source>/processed/`
+- `--evaluation_source`:
+  - Required when `--split_type cross_domain`
+  - Must be omitted (`None`) for all other split types
+
+In `cross_domain`, the model is trained on `--data_source` and evaluated on `--evaluation_source`, and both sources must have their processed datasets generated/downloaded.
 
 ### Usage with Comet
 
@@ -95,4 +113,3 @@ You need to specify ```api_key```, ```project_name``` and ```workspace```. Recom
 ## License
 
 <a rel="license" href="http://creativecommons.org/licenses/by-nc-nd/4.0/"><img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by-nc-nd/4.0/88x31.png" /></a><br />This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-nc-nd/4.0/">Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International License</a>.
-

@@ -22,6 +22,12 @@ class StratifiedSplitTrainingStrategy(BaseTrainingStrategy):
             dims, train_dataset, valid_dataset, test_dataset, y_test_df = data_fold
             drug_smiles_input_shape, cell_input_shape = dims
 
+            # Optional caching
+            if strategy_creator.args.cache_datasets:
+                train_dataset = train_dataset.cache()
+                valid_dataset = valid_dataset.cache()
+                test_dataset = test_dataset.cache()
+
             # Log scheduler recommendation
             scheduler_rec = get_scheduler_recommendation(
                 model_type='hybrid',

@@ -8,3 +8,6 @@ nohup.out
 **.png
 **.h5
 **.log
+/.cometml-runs/
+/logs/
+/checkpoints/

@@ -65,7 +65,11 @@ def create_enhanced_mlp_model(dense_units, input_tensor, prefix="enhanced_mlp"):
     
     # Compute attention scores
     attention_scores = layers.Dot(axes=-1, name=f'{prefix}_attention_scores')([query, key])
-    attention_scores = layers.Lambda(lambda x: x / tf.sqrt(float(attention_dim)), name=f'{prefix}_attention_scale')(attention_scores)
+    # Safe scale cast to input dtype (mixed precision compatibility)
+    attention_scores = layers.Lambda(
+        lambda x: x * tf.cast(1.0 / tf.math.sqrt(tf.constant(attention_dim, dtype=tf.float32)), x.dtype),
+        name=f'{prefix}_attention_scale'
+    )(attention_scores)
     attention_weights = layers.Softmax(name=f'{prefix}_attention_weights')(attention_scores)
     
     # Apply attention
@@ -99,7 +103,7 @@ def create_enhanced_mlp_model(dense_units, input_tensor, prefix="enhanced_mlp"):
     x = layers.Dropout(0.2, name=f'{prefix}_final_dropout')(x)
     
     # Output layer
-    output = layers.Dense(1, activation='linear', name=f'{prefix}_output_layer')(x)
+    output = layers.Dense(1, activation='linear', dtype='float32', name=f'{prefix}_output_layer')(x)
     
     return output
 
@@ -128,7 +132,10 @@ def create_cross_attention_fusion(drug_features, cell_features, output_dim=512, 
     
     # Compute attention scores
     drug_to_cell_scores = layers.Dot(axes=-1)([drug_query, cell_key])
-    drug_to_cell_scores = layers.Lambda(lambda x: x / tf.sqrt(float(output_dim)))(drug_to_cell_scores)
+    drug_to_cell_scores = layers.Lambda(
+        lambda x: x * tf.cast(1.0 / tf.math.sqrt(tf.constant(output_dim, dtype=tf.float32)), x.dtype),
+        name=f'{prefix}_drug_to_cell_scale'
+    )(drug_to_cell_scores)
     drug_to_cell_weights = layers.Softmax()(drug_to_cell_scores)
     
     # Apply attention
@@ -147,7 +154,10 @@ def create_cross_attention_fusion(drug_features, cell_features, output_dim=512, 
     
     # Compute attention scores
     cell_to_drug_scores = layers.Dot(axes=-1)([cell_query, drug_key])
-    cell_to_drug_scores = layers.Lambda(lambda x: x / tf.sqrt(float(output_dim)))(cell_to_drug_scores)
+    cell_to_drug_scores = layers.Lambda(
+        lambda x: x * tf.cast(1.0 / tf.math.sqrt(tf.constant(output_dim, dtype=tf.float32)), x.dtype),
+        name=f'{prefix}_cell_to_drug_scale'
+    )(cell_to_drug_scores)
     cell_to_drug_weights = layers.Softmax()(cell_to_drug_scores)
     
     # Apply attention

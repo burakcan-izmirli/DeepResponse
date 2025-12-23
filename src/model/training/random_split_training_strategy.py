@@ -1,10 +1,25 @@
 import os
 import logging
 import tensorflow as tf
-from tensorflow.keras.callbacks import ReduceLROnPlateau, ModelCheckpoint, EarlyStopping
+from tensorflow.keras.callbacks import Callback
 
 from src.model.training.base_training_strategy import BaseTrainingStrategy
 from src.model.training.advanced_schedulers import get_advanced_callbacks, get_scheduler_recommendation
+
+class GradientNormLogger(Callback):
+    def __init__(self, comet_experiment=None):
+        super().__init__()
+        self.comet = comet_experiment
+    def on_train_batch_end(self, batch, logs=None):
+        # Not easily accessible without custom training loop; skip
+        pass
+    def on_epoch_end(self, epoch, logs=None):
+        # Placeholder: gradient norms require custom train_step override; skip to avoid errors
+        if self.comet:
+            try:
+                self.comet.log_metric('epoch', epoch, step=epoch)
+            except Exception:
+                pass
 
 class RandomSplitTrainingStrategy(BaseTrainingStrategy):
     def train_and_evaluate_model(self, strategy_creator, dataset_input, comet_logger):
@@ -22,6 +37,12 @@ class RandomSplitTrainingStrategy(BaseTrainingStrategy):
 
             dims, train_dataset, valid_dataset, test_dataset, y_test_df = dataset_input
             drug_smiles_input_shape, cell_input_shape = dims
+
+            # Optionally cache datasets for speed
+            if strategy_creator.args.cache_datasets:
+                train_dataset = train_dataset.cache()
+                valid_dataset = valid_dataset.cache()
+                test_dataset = test_dataset.cache()
 
             # Log scheduler recommendation
             scheduler_rec = get_scheduler_recommendation(
@@ -52,6 +73,7 @@ class RandomSplitTrainingStrategy(BaseTrainingStrategy):
                 steps_per_epoch, 
                 comet_logger
             )
+            callbacks.append(GradientNormLogger(comet_logger))
 
             model.fit(
                 train_dataset,
