@@ -15,18 +15,36 @@ import time
 import logging
 from argparse import Namespace
 from contextlib import contextmanager
+from pathlib import Path
 
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
 
 from helper.argument_parser import argument_parser
 
-logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(name)s:%(asctime)s:%(message)s')
-logging.getLogger('tensorflow').setLevel(logging.ERROR)
+_LOG_FORMAT = '%(levelname)s:%(name)s:%(asctime)s:%(message)s'
 
 class DeepResponse:
     def __init__(self, args: Namespace):
         from src.strategy_creator import StrategyCreator
         self.strategy_creator = StrategyCreator(args)
+
+    def _configure_logging(self, args: Namespace):
+        log_dir = Path("logs")
+        log_dir.mkdir(parents=True, exist_ok=True)
+
+        log_parts = [args.data_source]
+        if args.evaluation_source:
+            log_parts.append(f"to_{args.evaluation_source}")
+        log_parts.extend([args.split_type, args.learning_task, f"stl{args.selformer_trainable_layers}"])
+        log_path = log_dir / f"{'_'.join(map(str, log_parts))}.log"
+
+        handlers = [
+            logging.StreamHandler(sys.stdout),
+            logging.FileHandler(log_path, mode="w", encoding="utf-8"),
+        ]
+        logging.basicConfig(level=logging.INFO, format=_LOG_FORMAT, handlers=handlers, force=True)
+        logging.getLogger('tensorflow').setLevel(logging.ERROR)
+        logging.info("Logging to %s", log_path)
 
     @contextmanager
     def _execution_timer(self):
@@ -47,8 +65,9 @@ class DeepResponse:
             SystemExit: On any critical error during execution
         """
         with self._execution_timer():
-            logging.info("DeepResponse started.")
             args = self.strategy_creator.args
+            self._configure_logging(args)
+            logging.info("DeepResponse started.")
 
             # Initialize Comet logging
             comet_logger = self._initialize_comet_logger()
