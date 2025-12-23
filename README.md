@@ -19,7 +19,7 @@ This repository implements a hybrid architecture consisting of a **SELFormer-bas
 
 <img width="1500" alt="Architecture of DeepResponse" src="https://github.com/burakcan-izmirli/DeepResponse/assets/65293991/97a7fd5c-28ae-43b8-977d-9503f2627abd">
 
-**Figure 1.** Architecture diagram (kept for visualization). For the repo’s current implementation details, see the references below.
+**Figure 1.** Hybrid deep convolutional and graph neural network (HDCGNN) architecture of DeepResponse. Multi-omic features of cell lines are processed via deep convolutional neural networks, whereas graph represented drug molecules are proessed by message passing networks containing transformer encoder layers.
 
 Implementation references: `src/dataset/base_dataset_strategy.py`, `src/model/build/base_model_build_strategy.py`, `src/model/build/architecture/selformer_architecture.py`.
 
