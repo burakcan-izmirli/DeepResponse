@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from dataset.common import BaseDatasetCreator, clean_string
+from dataset.common import BaseDatasetCreator
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
@@ -16,12 +16,8 @@ logger = logging.getLogger(__name__)
 class CCLEDatasetCreator(BaseDatasetCreator):
     """CCLE dataset creator with multi-omics features."""
 
-    def __init__(
-        self,
-        ic50_min: float = 1e-6,
-        ic50_max: float = 1e6,
-    ):
-        """Initialize CCLE dataset creator."""
+    def __init__(self, ic50_min: float = 1e-6, ic50_max: float = 1e6):
+        """Initialize the CCLE dataset creator."""
         base_dir = Path(__file__).resolve().parent
         super().__init__(base_dir)
         self.ic50_min = ic50_min
@@ -64,15 +60,11 @@ class CCLEDatasetCreator(BaseDatasetCreator):
         return set(cell_df['depmap_id'].dropna().unique())
 
     def load_cross_domain_gene_axis(self):
-        """
-        Load or create the CCLE gene axis used for CCLE/GDSC cross-domain runs.
-
-        Uses the precomputed CCLE/GDSC intersection axis.
-        """
+        """Load the precomputed CCLE/GDSC cross-domain gene axis."""
         intersection_path = self.cross_domain_gene_axis_path
         gene_df = pd.read_csv(intersection_path)
         gene_col = gene_df.columns[0]
-        genes = gene_df[gene_col].astype(str).apply(clean_string).tolist()
+        genes = gene_df[gene_col].astype(str).apply(BaseDatasetCreator.clean_string).tolist()
         genes = [g for g in genes if g]
         return genes
 
@@ -89,16 +81,11 @@ class CCLEDatasetCreator(BaseDatasetCreator):
         return mapping
 
     def load_ccle_rrbs_gene_matrix(self, gene_axis, cell_map, cell_list=None, chunksize=2000):
-        """
-        Aggregate CCLE RRBS loci to gene-level methylation values.
-
-        RRBS file is locus-by-cell with `locus_id` like `TP53_17_...`.
-        Output is a DataFrame indexed by cleaned `gene_name` (gene axis) with columns as cell_line_name.
-        """
+        """Aggregate CCLE RRBS loci to gene-level methylation values."""
         gene_axis = list(gene_axis)
         gene_set = set(gene_axis)
 
-        header = self._read_tab_header(self.methylation_path)
+        header = self._read_header_fields(self.methylation_path)
         if len(header) < 4:
             raise ValueError(f"Unexpected methylation header format in {self.methylation_path}")
         col_to_cell = self._resolve_cell_columns(header[3:], cell_map, cell_list)
@@ -111,7 +98,7 @@ class CCLEDatasetCreator(BaseDatasetCreator):
         sum_df = None
         count_df = None
         for grouped_sum, grouped_cnt in self._iter_rrbs_gene_chunks(col_to_cell, gene_set, chunksize):
-            sum_df, count_df = self._merge_grouped(sum_df, count_df, grouped_sum, grouped_cnt)
+            sum_df, count_df = self._merge_grouped_aggregates(sum_df, count_df, grouped_sum, grouped_cnt)
 
         if sum_df is None or count_df is None:
             raise ValueError("Failed to compute gene-level methylation matrix; no matching loci found.")
@@ -119,12 +106,7 @@ class CCLEDatasetCreator(BaseDatasetCreator):
         return self._finalize_rrbs_matrix(sum_df, count_df, gene_axis, col_to_cell)
 
     def load_ccle_absolute_gene_cnv(self, gene_axis, cell_list=None, chunksize=200_000):
-        """
-        Convert CCLE ABSOLUTE segment-level copy number to gene-level values by assigning the
-        segment `Modal_Total_CN` to each gene (based on gene midpoint overlap).
-
-        Output is a DataFrame indexed by cleaned `gene_name` (gene axis) with columns cell_line_name.
-        """
+        """Convert CCLE ABSOLUTE segments to gene-level CNV values."""
         gene_axis = list(gene_axis)
         gene_set = set(gene_axis)
 
@@ -181,7 +163,7 @@ class CCLEDatasetCreator(BaseDatasetCreator):
             low_memory=False,
             chunksize=chunksize,
         ):
-            genes = chunk["locus_id"].astype(str).str.split("_", n=1, expand=True)[0].apply(clean_string)
+            genes = chunk["locus_id"].astype(str).str.split("_", n=1, expand=True)[0].apply(BaseDatasetCreator.clean_string)
             chunk = chunk.drop(columns=["locus_id"])
             chunk.insert(0, "gene_name", genes)
             chunk = chunk[chunk["gene_name"].isin(gene_set)]
@@ -258,7 +240,7 @@ class CCLEDatasetCreator(BaseDatasetCreator):
             gene_name = attrs.get("gene_name", "")
             if not gene_name:
                 continue
-            gene_clean = clean_string(gene_name)
+            gene_clean = BaseDatasetCreator.clean_string(gene_name)
             if gene_clean not in gene_set or gene_clean in gene_coords:
                 continue
             try:
@@ -316,7 +298,7 @@ class CCLEDatasetCreator(BaseDatasetCreator):
     def _build_crispr_lookup(crispr_raw, gene_axis):
         gene_cols = [c for c in crispr_raw.columns if c != 'ModelID']
         crispr = crispr_raw.drop_duplicates(subset=['ModelID'], keep='first').copy()
-        crispr = crispr.rename(columns={col: clean_string(col) for col in gene_cols})
+        crispr = crispr.rename(columns={col: BaseDatasetCreator.clean_string(col) for col in gene_cols})
         crispr = crispr.loc[:, ~crispr.columns.duplicated()].set_index('ModelID')
         crispr = crispr.apply(pd.to_numeric, errors='coerce')
         crispr = crispr.reindex(columns=gene_axis)
@@ -376,7 +358,7 @@ class CCLEDatasetCreator(BaseDatasetCreator):
         return eligible_cells
 
     def load_gene_expression_data(self):
-        """Load expression table and return (gene_name list, expression dataframe, cell_map)."""
+        """Load expression table and return genes, expression, and cell map."""
         expr_df = pd.read_csv(self.expression_path, sep='\t')
         expr_df = expr_df.rename(columns={'gene_id': 'gene_name'})
         expr_df['gene_name'] = expr_df['gene_name'].apply(lambda x: str(x).split('.')[0].upper())
@@ -393,7 +375,7 @@ class CCLEDatasetCreator(BaseDatasetCreator):
         numeric_cols = [c for c in expr_df.columns if c != 'gene_name']
         expr_df[numeric_cols] = expr_df[numeric_cols].apply(pd.to_numeric, errors='coerce')
 
-        expr_df['gene_name'] = expr_df['gene_name'].apply(clean_string)
+        expr_df['gene_name'] = expr_df['gene_name'].apply(BaseDatasetCreator.clean_string)
         expr_df = expr_df[expr_df['gene_name'] != '']
 
         # Deduplicate after cleaning to ensure unique index for fast lookup.
@@ -403,18 +385,16 @@ class CCLEDatasetCreator(BaseDatasetCreator):
         return expr_df['gene_name'].tolist(), expr_df, cell_map
 
     def create_drug_cell_dataframe(self, drug_list=None, drug_vocab=None, cell_list=None):
-        """
-        Create drug-cell pairs using PRISM repurposing response file.
-        """
+        """Create drug-cell pairs using PRISM repurposing response file."""
         drug_cell_pairs_raw = pd.read_csv(self.drug_response_path)
-        drug_cell_pairs_raw['drug_name'] = drug_cell_pairs_raw['name'].apply(clean_string)
+        drug_cell_pairs_raw['drug_name'] = drug_cell_pairs_raw['name'].apply(BaseDatasetCreator.clean_string)
         combined_dict = drug_vocab[1] if drug_vocab else None
         if combined_dict:
             drug_cell_pairs_raw['drug_name'] = drug_cell_pairs_raw['drug_name'].apply(
                 lambda n: combined_dict.get(n, n)
             )
         if drug_list:
-            drug_list_clean = {clean_string(name) for name in drug_list}
+            drug_list_clean = {BaseDatasetCreator.clean_string(name) for name in drug_list}
             drug_cell_pairs_raw = drug_cell_pairs_raw[drug_cell_pairs_raw['drug_name'].isin(drug_list_clean)]
         drug_cell_pairs_raw['cell_line_name'] = drug_cell_pairs_raw['depmap_id'].astype(str)
         drug_cell_pairs_raw['smiles'] = drug_cell_pairs_raw.get('smiles')
@@ -463,12 +443,7 @@ class CCLEDatasetCreator(BaseDatasetCreator):
         return drug_cell_pairs_raw
 
     def create_dataset(self):
-        """
-        Create the CCLE dataset from raw files.
-
-        Returns a DataFrame with columns:
-        - `drug_name`, `smiles`, `cell_line_name`, `cell_line_features`, `pic50`.
-        """
+        """Create the CCLE dataset from raw files."""
         self._assert_required_inputs()
         vocab_tuple = self.load_drug_vocabulary()
         canonical_smiles_map = self.load_canonical_smiles_map()
