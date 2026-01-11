@@ -491,6 +491,7 @@ class CCLEDatasetCreator(BaseDatasetCreator):
         # canonicalsmiles from the shared drugbank vocabulary via the same synonym->common mapping.
         combined_dict = vocab_tuple[1] if vocab_tuple else None
         dataset = self._apply_canonical_smiles(dataset, canonical_smiles_map, combined_dict, reference_smiles_map)
+        dataset = self._apply_pubchem_smiles_fallback(dataset)
 
         dataset = dataset.dropna(subset=['smiles'])
 

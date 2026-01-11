@@ -328,21 +328,6 @@ class GDSCDatasetCreator(BaseDatasetCreator):
             lookup[depmap_id][idx] = value
         return lookup
 
-    def _load_clean_table(self, path: Path) -> pd.DataFrame:
-        """Read a delimited file and normalize column names."""
-        sep = self._infer_delimiter(path)
-        df = pd.read_csv(path, sep=sep, low_memory=False)
-        df.columns = [BaseDatasetCreator.clean_string(c) for c in df.columns]
-        return df
-
-    @staticmethod
-    def _require_column(columns: List[str], candidates: Set[str], path: Path, label: str) -> str:
-        """Pick a required column name from candidates."""
-        col = next((c for c in columns if c in candidates), None)
-        if col is None:
-            raise ValueError(f"{path} must include {label} (found: {sorted(columns)}).")
-        return col
-
     def _resolve_response_columns(self, resp: pd.DataFrame) -> Tuple[str, str, str, Optional[str]]:
         """Resolve required response columns."""
         cosmic_col = self._require_column(resp.columns, {"cosmicid", "cosmic_id"}, self.drug_response_path, "cosmic_id")
@@ -371,7 +356,7 @@ class GDSCDatasetCreator(BaseDatasetCreator):
     def _normalize_drug_table(self, drugs: pd.DataFrame, drug_smiles_id_col: str, drug_name_col: str, smiles_col: str) -> pd.DataFrame:
         """Normalize drug table values."""
         drugs[drug_smiles_id_col] = pd.to_numeric(drugs[drug_smiles_id_col], errors="coerce").astype("Int64")
-        drugs = drugs.dropna(subset=[drug_smiles_id_col, drug_name_col, smiles_col]).copy()
+        drugs = drugs.dropna(subset=[drug_smiles_id_col, drug_name_col]).copy()
         drugs["drug_name"] = drugs[drug_name_col].astype(str).apply(BaseDatasetCreator.clean_string)
         drugs["smiles"] = drugs[smiles_col].astype(str)
         return drugs.drop_duplicates(subset=[drug_smiles_id_col])
@@ -383,14 +368,6 @@ class GDSCDatasetCreator(BaseDatasetCreator):
         if self.baseline_cell_lines:
             merged = merged[merged["cell_line_name"].isin(self.baseline_cell_lines)].copy()
         return merged
-
-    @staticmethod
-    def _dedupe_by_dataset(merged: pd.DataFrame, drug_id_col: str, dataset_col: Optional[str]) -> pd.DataFrame:
-        """Deduplicate responses, preferring GDSC2 when available."""
-        if dataset_col is not None:
-            merged["dataset_rank"] = (merged[dataset_col].astype(str).str.upper() != "GDSC2").astype(int)
-            merged = merged.sort_values(["cell_line_name", drug_id_col, "dataset_rank"])
-        return merged.drop_duplicates(subset=["cell_line_name", drug_id_col], keep="first")
 
     @staticmethod
     def _finalize_response_records(merged: pd.DataFrame, ic50_col: str) -> pd.DataFrame:
@@ -417,7 +394,9 @@ class GDSCDatasetCreator(BaseDatasetCreator):
                             how="inner",)
 
         merged = self._apply_baseline_filters(merged, drug_id_col)
-        merged = self._dedupe_by_dataset(merged, drug_id_col, dataset_col)
+        merged = self._dedupe_by_dataset_preference(merged, ["cell_line_name", drug_id_col], dataset_col)
+        merged["drug_id"] = pd.to_numeric(merged[drug_id_col], errors="coerce")
+        merged = self._apply_pubchem_smiles_fallback(merged)
         return self._finalize_response_records(merged, ic50_col)
 
     def _load_expression_matrix(self, gene_axis: List[str], records: pd.DataFrame, cosmic_to_depmap: Dict[str, str]) -> pd.DataFrame:

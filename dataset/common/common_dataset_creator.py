@@ -15,6 +15,7 @@ class BaseDatasetCreator(ABC):
     """Abstract base class for dataset creators."""
     EPSILON = 1e-9
     DATASET_COLUMN_ORDER = ["drug_name", "smiles", "cell_line_name", "cell_line_features", "pic50"]
+    OMICS_ORDER = ["gene_expression", "crispr", "copy_number_variation", "methylation"]
 
     def __init__(self, base_dir: Path):
         """Initialize the base dataset creator."""
@@ -82,31 +83,30 @@ class BaseDatasetCreator(ABC):
 
         return {self.clean_string(name) for name in all_gene_names}
 
-    def filter_by_gene_names(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Filter nested gene tables to the cancer gene census list."""
+    def filter_gene_axis_by_names(self, cell_line_features_df: pd.DataFrame,
+                                  gene_axis: List[str]) -> Tuple[pd.DataFrame, List[str]]:
+        """Filter array features to the cancer gene census list using gene_axis."""
         gene_set = self.load_gene_name_set()
-
-        def filter_nested(nested_df):
-            if isinstance(nested_df, pd.DataFrame):
-                nested_df = nested_df.copy()
-                nested_df['gene_name'] = nested_df['gene_name'].apply(self.clean_string)
-                return nested_df[nested_df['gene_name'].isin(gene_set)].reset_index(drop=True)
-            return nested_df
-
-        filtered_df = df.copy()
-        filtered_df['cell_line_features'] = df['cell_line_features'].apply(filter_nested)
-        return filtered_df
+        keep_mask = [gene in gene_set for gene in gene_axis]
+        kept = sum(keep_mask)
+        filtered_df = cell_line_features_df.copy()
+        filtered_df['cell_line_features'] = filtered_df['cell_line_features'].apply(
+            lambda arr: arr[keep_mask, :] if isinstance(arr, np.ndarray) else arr)
+        filtered_axis = [gene for gene, keep in zip(gene_axis, keep_mask) if keep]
+        return filtered_df, filtered_axis
 
     @staticmethod
-    def filter_genes_by_missing_values(cell_line_features_df: pd.DataFrame, gene_axis: List[str], 
+    def filter_genes_by_missing_values(cell_line_features_df: pd.DataFrame, gene_axis: List[str],
                                        threshold: float = 0.6) -> Tuple[pd.DataFrame, List[str]]:
-        """Filter genes by missing-value rate and keep the axis aligned."""
+        """Filter genes by missing-value rate per channel and keep the axis aligned."""
         features_list = cell_line_features_df['cell_line_features'].tolist()
-        if not features_list or not isinstance(features_list[0], np.ndarray):
+        if not features_list:
+            return cell_line_features_df, gene_axis
+        if not isinstance(features_list[0], np.ndarray):
             return cell_line_features_df, gene_axis
         stacked = np.stack(features_list, axis=0)
-        missing_rate = np.isnan(stacked).mean(axis=(0, 2))
-        keep_mask = missing_rate <= threshold
+        missing_rate = np.isnan(stacked).mean(axis=0)
+        keep_mask = (missing_rate <= threshold).all(axis=1)
         kept = int(keep_mask.sum())
         if kept == 0 or kept == stacked.shape[1]:
             return cell_line_features_df, gene_axis
@@ -133,6 +133,21 @@ class BaseDatasetCreator(ABC):
     def _infer_delimiter(path: Path) -> str:
         """Return delimiter for delimited text based on file suffix."""
         return "\t" if path.suffix.lower() in {".tsv", ".txt"} else ","
+
+    def _load_clean_table(self, path: Path) -> pd.DataFrame:
+        """Read a delimited file and normalize column names."""
+        sep = self._infer_delimiter(path)
+        df = pd.read_csv(path, sep=sep, low_memory=False)
+        df.columns = [self.clean_string(c) for c in df.columns]
+        return df
+
+    @staticmethod
+    def _require_column(columns: Iterable[str], candidates: Set[str], path: Path, label: str) -> str:
+        """Pick a required column name from candidates."""
+        col = next((c for c in columns if c in candidates), None)
+        if col is None:
+            raise ValueError(f"{path} must include {label} (found: {sorted(columns)}).")
+        return col
 
     @staticmethod
     def _merge_grouped_aggregates(sum_df: Optional[pd.DataFrame], count_df: Optional[pd.DataFrame],
@@ -174,10 +189,12 @@ class BaseDatasetCreator(ABC):
     def filter_cell_lines_by_missing_values(df: pd.DataFrame, threshold: float = 0.75) -> pd.DataFrame:
         """Filter out cell lines with too many missing values per channel."""
         def is_valid(cell_features):
-            if not isinstance(cell_features, np.ndarray) or cell_features.size == 0:
-                return False
-            missing_per_channel = np.isnan(cell_features).mean(axis=0)
-            return not (missing_per_channel > threshold).any()
+            if isinstance(cell_features, np.ndarray):
+                if cell_features.size == 0:
+                    return False
+                missing_per_channel = np.isnan(cell_features).mean(axis=0)
+                return not (missing_per_channel > threshold).any()
+            return False
 
         mask = df['cell_line_features'].apply(is_valid)
         filtered_df = df[mask].reset_index(drop=True)
@@ -267,12 +284,8 @@ class BaseDatasetCreator(ABC):
     def _filter_reference_drugs(self) -> Tuple[Set[str], Dict[str, str]]:
         """Return reference drug names and SMILES from the curation list."""
         pubchem_ids = self.load_reference_drug_ids("pubchem_id")
-        if not pubchem_ids:
-            return set(), {}
 
-        vocab = pd.read_csv(
-            self.drug_vocabulary_path,
-            usecols=['cid', 'cmpdname', 'canonicalsmiles', 'Common name']
+        vocab = pd.read_csv(self.drug_vocabulary_path, usecols=['cid', 'cmpdname', 'canonicalsmiles', 'Common name']
         ).rename(columns={'Common name': 'common_name'})
         vocab['cid'] = pd.to_numeric(vocab['cid'], errors='coerce').astype('Int64')
         vocab = vocab[vocab['cid'].isin(pubchem_ids)].copy()
@@ -295,8 +308,10 @@ class BaseDatasetCreator(ABC):
     @staticmethod
     def _harmonize_reference_smiles(df: pd.DataFrame, reference_smiles_map: Dict[str, str]) -> pd.DataFrame:
         """Fill missing SMILES using a reference mapping."""
-        if not reference_smiles_map or df.empty:
-            return df
+        if df.empty:
+            raise ValueError("Cannot harmonize SMILES: dataset is empty.")
+        if not reference_smiles_map:
+            raise ValueError("Reference SMILES map is empty; check reference drug list/vocabulary.")
         before_missing = int(df['smiles'].isna().sum())
         mapped = df['drug_name'].map(reference_smiles_map)
         replaced_rows = int(mapped.notna().sum())
@@ -310,12 +325,58 @@ class BaseDatasetCreator(ABC):
         )
         return df
 
+    def _apply_pubchem_smiles_fallback(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Fill missing SMILES using PubChem ids from the reference drug list."""
+        if df.empty or 'drug_id' not in df.columns or 'smiles' not in df.columns:
+            return df
+        missing_mask = df['smiles'].isna()
+        if not missing_mask.any():
+            return df
+
+        ref = pd.read_csv(self.reference_drug_list_path, usecols=['gdsc_id', 'pubchem_id'])
+        ref['gdsc_id'] = pd.to_numeric(ref['gdsc_id'], errors='coerce')
+        ref['pubchem_id'] = pd.to_numeric(ref['pubchem_id'], errors='coerce')
+        ref = ref.dropna(subset=['gdsc_id', 'pubchem_id']).drop_duplicates(subset=['gdsc_id'])
+
+        vocab = pd.read_csv(self.drug_vocabulary_path, usecols=['cid', 'canonicalsmiles'])
+        vocab['cid'] = pd.to_numeric(vocab['cid'], errors='coerce')
+        vocab = vocab.dropna(subset=['cid', 'canonicalsmiles']).drop_duplicates(subset=['cid'])
+
+        merged = ref.merge(vocab, left_on='pubchem_id', right_on='cid', how='left')
+        merged = merged.dropna(subset=['canonicalsmiles']).drop_duplicates(subset=['gdsc_id'])
+        if merged.empty:
+            return df
+
+        map_dict = dict(zip(merged['gdsc_id'], merged['canonicalsmiles']))
+        drug_ids = pd.to_numeric(df['drug_id'], errors='coerce')
+        fallback = drug_ids.map(map_dict)
+        replaced = int(fallback[missing_mask].notna().sum())
+        if replaced:
+            df.loc[missing_mask, 'smiles'] = fallback[missing_mask]
+            logger.info("Filled %d missing SMILES values via PubChem fallback.", replaced)
+        return df
+
+    @staticmethod
+    def _dedupe_by_dataset_preference(df: pd.DataFrame, group_cols: List[str],
+                                      dataset_col: Optional[str],
+                                      preferred_value: str = "GDSC2") -> pd.DataFrame:
+        """Deduplicate by group_cols, preferring rows with dataset_col == preferred_value."""
+        df = df.copy()
+        df["_dataset_rank"] = (df[dataset_col].astype(str).str.upper() != preferred_value).astype(int)
+        df = df.sort_values(group_cols + ["_dataset_rank"])
+        df = df.drop_duplicates(subset=group_cols, keep="first").drop(columns=["_dataset_rank"])
+        return df
+
     @staticmethod
     def _apply_canonical_smiles(dataset: pd.DataFrame, canonical_smiles_map: Dict[str, str], 
                                 combined_dict: Dict[str, str], reference_smiles_map: Dict[str, str]) -> pd.DataFrame:
         """Apply canonical SMILES for non-reference drug names."""
-        if not canonical_smiles_map or not combined_dict or dataset.empty:
-            return dataset
+        if dataset.empty:
+            raise ValueError("Cannot apply canonical SMILES: dataset is empty.")
+        if not canonical_smiles_map:
+            raise ValueError("Canonical SMILES map is empty; check drug_vocabulary.csv.")
+        if not combined_dict:
+            raise ValueError("Drug synonym mapping is empty; check drug_vocabulary.csv.")
         ref_drugs = set(reference_smiles_map.keys()) if reference_smiles_map else set()
         common_name = dataset['drug_name'].map(lambda n: combined_dict.get(n, n))
         canonical = common_name.map(canonical_smiles_map)
@@ -329,22 +390,19 @@ class BaseDatasetCreator(ABC):
             )
         return dataset
 
-    @staticmethod
-    def strip_cell_line_name_column(nested_df: object) -> object:
-        """Remove cell_line_name column from nested DataFrames."""
-        if isinstance(nested_df, pd.DataFrame):
-            return nested_df.loc[:, ~nested_df.columns.str.contains('cell_line_name')]
-        return nested_df
-    
-    @staticmethod
-    def dataframe_to_array(nested_df: object) -> object:
-        """Convert nested DataFrame to numpy array (drop gene_name column)."""
-        if isinstance(nested_df, pd.DataFrame):
-            if 'gene_name' in nested_df.columns:
-                nested_df = nested_df.drop(columns=['gene_name'])
-            arr = nested_df.to_numpy(dtype=np.float32)
-            return arr.astype(np.float32, copy=True)
-        return nested_df
+    def zscore_cell_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Z-score cell_line_features per gene/channel across cells."""
+        features_list = df['cell_line_features'].tolist()
+        if not features_list or not isinstance(features_list[0], np.ndarray):
+            return df
+        stacked = np.stack(features_list, axis=0).astype(np.float32, copy=False)
+        mean = np.nanmean(stacked, axis=0)
+        std = np.nanstd(stacked, axis=0)
+        std = np.where(std == 0, 1.0, std)
+        normalized = (stacked - mean) / std
+        df = df.copy()
+        df['cell_line_features'] = [normalized[i] for i in range(normalized.shape[0])]
+        return df
     
     @staticmethod
     def ensure_float32(features: object) -> Optional[np.ndarray]:
