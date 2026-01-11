@@ -1,7 +1,7 @@
 """GDSC dataset creator."""
 import logging
 from pathlib import Path
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 import numpy as np
 import pandas as pd
@@ -34,7 +34,7 @@ class GDSCDatasetCreator(BaseDatasetCreator):
         self.baseline_gdsc_ids = self.load_reference_drug_ids("gdsc_id")
         self.baseline_cell_lines = self.load_reference_cell_lines()
 
-    def load_cell_line_map(self, cosmic_col: str = "cosmicid", depmap_col: str = "depmapid") -> Dict[str, str]:
+    def load_cell_line_map(self, cosmic_col: str = "cosmic_id", depmap_col: str = "depmap_id") -> Dict[str, str]:
         """Load COSMIC->DepMap mapping."""
         df = self._load_clean_table(self.cell_line_map_path)
         df = df.dropna(subset=[cosmic_col, depmap_col]).copy()

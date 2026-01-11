@@ -2,6 +2,7 @@
 import logging
 import re
 from pathlib import Path
+from typing import List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -63,22 +64,30 @@ class DepMapDatasetCreator(BaseDatasetCreator):
             "methylation": self.methylation_path,
         }
         df = pd.read_csv(raw_paths[dataset_name], low_memory=False)
+        if "cell_line_name" not in df.columns:
+            first_col = df.columns[0]
+            if first_col in {"", "Unnamed: 0"}:
+                df = df.rename(columns={first_col: "cell_line_name"})
+            elif "depmap_id" in df.columns:
+                df = df.rename(columns={"depmap_id": "cell_line_name"})
+            elif "ModelID" in df.columns:
+                df = df.rename(columns={"ModelID": "cell_line_name"})
+            elif "DepMap_ID" in df.columns:
+                df = df.rename(columns={"DepMap_ID": "cell_line_name"})
+            else:
+                raise ValueError(
+                    f"{raw_paths[dataset_name]} is missing a cell line identifier column. "
+                    f"Columns: {sorted(df.columns)}"
+                )
 
         if dataset_name == "methylation":
-            if 'cell_line_name' not in df.columns and 'depmap_id' in df.columns:
-                df.rename(columns={'depmap_id': 'cell_line_name'}, inplace=True)
             df.columns = [
-                self._extract_gene_prefix(col) if col != 'cell_line_name' else col
+                self._extract_gene_prefix(col) if col != "cell_line_name" else col
                 for col in df.columns
             ]
-        elif 'cell_line_name' not in df.columns:
-            if 'ModelID' in df.columns:
-                df.rename(columns={'ModelID': 'cell_line_name'}, inplace=True)
-            elif 'DepMap_ID' in df.columns:
-                df.rename(columns={'DepMap_ID': 'cell_line_name'}, inplace=True)
 
         df = self._strip_gene_annotations(df)
-        return self._coerce_numeric(df, cell_line_column='cell_line_name')
+        return self._coerce_numeric(df, cell_line_column="cell_line_name")
     
     def _build_cell_line_features(self) -> Tuple[pd.DataFrame, List[str]]:
         """Build per-cell feature arrays and a shared gene axis."""
@@ -188,6 +197,7 @@ class DepMapDatasetCreator(BaseDatasetCreator):
             'IC50_PUBLISHED': 'ic50'
         })
         ic50_df_raw['drug_name'] = ic50_df_raw['drug_name'].astype(str).apply(self.clean_string)
+        ic50_df_raw['smiles'] = np.nan
 
         ic50_df_raw = self._dedupe_by_dataset_preference(ic50_df_raw, ["cell_line_name", "drug_id"], "dataset",)
         
