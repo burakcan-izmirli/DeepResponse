@@ -29,6 +29,7 @@ class BaseDatasetCreator(ABC):
         self.drug_vocabulary_path = self.reference_dir / "drug_vocabulary.csv"
         self.census_gene_names_path = self.reference_dir / "census_gene_names.csv"
         self.cross_domain_gene_axis_path = self.reference_dir / "ccle_gdsc_gene_intersection.csv"
+        self.gencode_gtf_path = self.reference_dir / "gencode_v19_genes.gtf"
 
         # Standard output paths
         self.drug_response_features_path = self.processed_dir / "drug_response_features.csv"
@@ -42,6 +43,28 @@ class BaseDatasetCreator(ABC):
         s = s.lower()
         s = re.sub(r'\s+', '', s)
         return s
+
+    def load_reference_drug_ids(self, column: str) -> Set[int]:
+        """Return reference drug ids from the curated list."""
+        ref = pd.read_csv(self.reference_drug_list_path, dtype=str, keep_default_na=False)
+        if column not in ref.columns:
+            raise ValueError(f"Missing {column} in {self.reference_drug_list_path}")
+        ids = pd.to_numeric(ref[column], errors="coerce").dropna().astype("Int64")
+        return set(ids.astype(int).tolist())
+
+    def load_reference_cell_lines(self) -> Set[str]:
+        """Return reference cell line ids from the curated list."""
+        ref = pd.read_csv(self.reference_cell_line_list_path, dtype=str, keep_default_na=False)
+        if "depmap_id" not in ref.columns:
+            raise ValueError(f"Missing depmap_id in {self.reference_cell_line_list_path}")
+        return set(ref["depmap_id"].dropna().astype(str).unique())
+
+    def load_cross_domain_gene_axis(self) -> List[str]:
+        """Return cleaned gene axis from the CCLE/GDSC intersection file."""
+        gene_df = pd.read_csv(self.cross_domain_gene_axis_path)
+        gene_col = gene_df.columns[0]
+        genes = gene_df[gene_col].astype(str).apply(self.clean_string).tolist()
+        return [g for g in genes if g]
 
     def load_gene_name_set(self) -> Optional[Set[str]]:
         """Load the cancer gene census list and its synonyms."""
@@ -148,13 +171,13 @@ class BaseDatasetCreator(ABC):
         return new_idx, mat
 
     @staticmethod
-    def filter_cell_lines_by_missing_values(df: pd.DataFrame, missing_threshold: float = 0.75) -> pd.DataFrame:
+    def filter_cell_lines_by_missing_values(df: pd.DataFrame, threshold: float = 0.75) -> pd.DataFrame:
         """Filter out cell lines with too many missing values per channel."""
         def is_valid(cell_features):
             if not isinstance(cell_features, np.ndarray) or cell_features.size == 0:
                 return False
             missing_per_channel = np.isnan(cell_features).mean(axis=0)
-            return not (missing_per_channel > missing_threshold).any()
+            return not (missing_per_channel > threshold).any()
 
         mask = df['cell_line_features'].apply(is_valid)
         filtered_df = df[mask].reset_index(drop=True)
@@ -220,11 +243,6 @@ class BaseDatasetCreator(ABC):
         return text
 
     @staticmethod
-    def _first_existing_path(candidates: Iterable[Path]) -> Optional[Path]:
-        """Return the first existing path from candidates."""
-        return next((p for p in candidates if p and p.exists()), None)
-
-    @staticmethod
     def parse_gtf_attributes(attr: str) -> Dict[str, str]:
         """Parse a GTF attribute string into a dict."""
         parts = [p.strip() for p in str(attr).split(';') if p.strip()]
@@ -248,11 +266,7 @@ class BaseDatasetCreator(ABC):
 
     def _filter_reference_drugs(self) -> Tuple[Set[str], Dict[str, str]]:
         """Return reference drug names and SMILES from the curation list."""
-        ref = pd.read_csv(self.reference_drug_list_path, dtype=str, keep_default_na=False)
-        if 'pubchem_id' not in ref.columns:
-            raise ValueError(f"Missing pubchem_id in {self.reference_drug_list_path}")
-        pubchem_ids = pd.to_numeric(ref['pubchem_id'], errors='coerce').dropna().astype('Int64')
-        pubchem_ids = set(pubchem_ids.astype(int).astype(str))
+        pubchem_ids = self.load_reference_drug_ids("pubchem_id")
         if not pubchem_ids:
             return set(), {}
 
@@ -261,7 +275,7 @@ class BaseDatasetCreator(ABC):
             usecols=['cid', 'cmpdname', 'canonicalsmiles', 'Common name']
         ).rename(columns={'Common name': 'common_name'})
         vocab['cid'] = pd.to_numeric(vocab['cid'], errors='coerce').astype('Int64')
-        vocab = vocab[vocab['cid'].astype(str).isin(pubchem_ids)].copy()
+        vocab = vocab[vocab['cid'].isin(pubchem_ids)].copy()
 
         allowed = set()
         smiles_map = {}
@@ -409,4 +423,3 @@ class BaseDatasetCreator(ABC):
         ordered = [col for col in preferred_order if col in df.columns]
         remaining = [col for col in df.columns if col not in ordered]
         return df[ordered + remaining]
-

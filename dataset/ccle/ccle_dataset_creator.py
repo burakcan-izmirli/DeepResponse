@@ -28,24 +28,8 @@ class CCLEDatasetCreator(BaseDatasetCreator):
         self.cnv_path = self.raw_dir / "CCLE_ABSOLUTE_combined_20181227.csv"
         self.drug_response_path = self.raw_dir / "prism-repurposing-20q2-secondary-screen-dose-response-curve-parameters.csv"
         self.cell_map_path = self.raw_dir / "Cell_lines_annotations_20181226.txt"
-        self.gencode_gtf_path = self.raw_dir / "gencode.v19.genes.v7_model.patched_contigs.gtf"
         self.crispr_path = self.raw_dir / "CRISPRGeneDependency.csv"
-        self.baseline_cell_lines = self._load_baseline_cell_lines()
-
-    def _assert_required_inputs(self):
-        required_paths = [
-            self.expression_path,
-            self.methylation_path,
-            self.cnv_path,
-            self.drug_response_path,
-            self.cell_map_path,
-            self.gencode_gtf_path,
-            self.crispr_path,
-        ]
-        missing = [path for path in required_paths if not path.exists()]
-        if missing:
-            missing_list = ", ".join(str(path) for path in missing)
-            raise FileNotFoundError(f"Missing CCLE raw inputs: {missing_list}")
+        self.baseline_cell_lines = self.load_reference_cell_lines()
 
     def load_cell_line_map(self):
         """Map CCLE_ID to depmap_id for consistent joins."""
@@ -53,20 +37,6 @@ class CCLEDatasetCreator(BaseDatasetCreator):
         ann['CCLE_ID'] = ann['CCLE_ID'].astype(str).str.upper()
         ann['depMapID'] = ann['depMapID'].astype(str)
         return dict(zip(ann['CCLE_ID'], ann['depMapID']))
-
-    def _load_baseline_cell_lines(self):
-        """Load baseline DepMap IDs for consistency with DepMap filtering."""
-        cell_df = pd.read_csv(self.reference_cell_line_list_path, dtype=str, keep_default_na=False)
-        return set(cell_df['depmap_id'].dropna().unique())
-
-    def load_cross_domain_gene_axis(self):
-        """Load the precomputed CCLE/GDSC cross-domain gene axis."""
-        intersection_path = self.cross_domain_gene_axis_path
-        gene_df = pd.read_csv(intersection_path)
-        gene_col = gene_df.columns[0]
-        genes = gene_df[gene_col].astype(str).apply(BaseDatasetCreator.clean_string).tolist()
-        genes = [g for g in genes if g]
-        return genes
 
     def load_ensembl_to_symbol_map(self):
         """Load Ensembl (no version) -> gene symbol map from a GTF."""
@@ -444,7 +414,6 @@ class CCLEDatasetCreator(BaseDatasetCreator):
 
     def create_dataset(self):
         """Create the CCLE dataset from raw files."""
-        self._assert_required_inputs()
         vocab_tuple = self.load_drug_vocabulary()
         canonical_smiles_map = self.load_canonical_smiles_map()
         drug_list, reference_smiles_map = self._filter_reference_drugs()
@@ -528,13 +497,6 @@ class CCLEDatasetCreator(BaseDatasetCreator):
         dataset = dataset.dropna(subset=['cell_line_features', 'drug_name', 'pic50'])
 
         return dataset
-
-    def create_and_save_dataset(self):
-        """Create the CCLE dataset and save the processed artifacts."""
-        dataset = self.create_dataset()
-        self.save_dataset(dataset)
-        return dataset
-
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(message)s")
