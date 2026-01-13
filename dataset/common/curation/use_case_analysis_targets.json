@@ -1,0 +1,19 @@
+{
+  "targets": [
+    {
+      "drug_name": "Eprinomectin",
+      "drug_smiles": "CO[C@H]1C[C@H](O[C@@H]2/C(C)=C\\C[C@@H]3C[C@@H](C[C@]4(C=C[C@H](C)[C@@H](C(C)C)O4)O3)OC(=O)[C@@H]3C=C(C)[C@@H](O)[C@H]4OC/C(=C/C=C\\[C@@H]2C)[C@]43O)O[C@@H](C)[C@H]1O[C@H]1C[C@@H](OC)[C@H](N=C(C)O)[C@H](C)O1",
+      "inchi": "InChI=1S/C49H73NO14/c1-25(2)43-28(5)17-18-48(64-43)23-35-20-34(63-48)16-15-27(4)44(26(3)13-12-14-33-24-57-46-42(52)29(6)19-36(47(53)60-35)49(33,46)54)61-40-22-38(56-11)45(31(8)59-40)62-39-21-37(55-10)41(30(7)58-39)50-32(9)51/h12-15,17-19,25-26,28,30-31,34-46,52,54H,16,20-24H2,1-11H3,(H,50,51)/b13-12-,27-15-,33-14-/t26-,28-,30-,31-,34+,35-,36-,37+,38-,39-,40-,41+,42+,43+,44-,45+,46+,48+,49+/m0/s1",
+      "cell_lines": [
+        { "display_name": "HuH-7", "ach_id": "ACH-000480" },
+        { "display_name": "HCT116", "ach_id": "ACH-000971" },
+        { "display_name": "MCF7", "ach_id": "ACH-000019" },
+        { "display_name": "Hep3B", "ach_id": "ACH-000625" },
+        { "display_name": "SNU475", "ach_id": "ACH-000422" },
+        { "display_name": "SNU423", "ach_id": "ACH-000493" },
+        { "display_name": "SNU387", "ach_id": "ACH-000478" }
+      ]
+    }
+  ],
+  "cell_line_mapping_csv": "dataset/common/curation/reference_cell_line_list.csv"
+}
