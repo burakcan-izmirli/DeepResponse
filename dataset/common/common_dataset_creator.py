@@ -67,6 +67,54 @@ class BaseDatasetCreator(ABC):
         genes = gene_df[gene_col].astype(str).apply(self.clean_string).tolist()
         return [g for g in genes if g]
 
+    def save_gene_axis(self, gene_axis: List[str], output_path: Path) -> None:
+        """Save a gene axis to disk."""
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame({"gene_name": gene_axis}).to_csv(output_path, index=False)
+
+    def load_gene_axis(self, axis_path: Path) -> List[str]:
+        """Load a gene axis from disk."""
+        gene_df = pd.read_csv(axis_path)
+        gene_col = gene_df.columns[0]
+        genes = gene_df[gene_col].astype(str).apply(self.clean_string).tolist()
+        return [g for g in genes if g]
+
+    def apply_cross_domain_intersection(self, cell_line_features_df: pd.DataFrame,
+                                        gene_axis: List[str],
+                                        other_axis_path: Path) -> Tuple[pd.DataFrame, List[str]]:
+        """Apply post-filter intersection axis to cell line features."""
+        if not other_axis_path.exists():
+            msg = (
+                f"Missing cross-domain axis at {other_axis_path}. "
+                "Build the other dataset first to create its gene_axis.csv, then rerun."
+            )
+            logger.error(msg)
+            raise FileNotFoundError(msg)
+        other_axis = self.load_gene_axis(other_axis_path)
+        other_set = set(other_axis)
+        intersection_set = set(gene_axis).intersection(other_set)
+        if not intersection_set:
+            raise ValueError(f"No overlapping genes between axes: {other_axis_path}")
+
+        if self.cross_domain_gene_axis_path.exists():
+            canonical = [g for g in self.load_cross_domain_gene_axis() if g in intersection_set]
+            if not canonical:
+                raise ValueError(
+                    f"Cross-domain axis at {self.cross_domain_gene_axis_path} has no overlap with current axes."
+                )
+        else:
+            canonical = [g for g in gene_axis if g in intersection_set]
+
+        index_map = {g: i for i, g in enumerate(gene_axis)}
+        indices = [index_map[g] for g in canonical if g in index_map]
+
+        filtered_df = cell_line_features_df.copy()
+        filtered_df['cell_line_features'] = filtered_df['cell_line_features'].apply(
+            lambda arr: arr[indices, :] if isinstance(arr, np.ndarray) else arr
+        )
+        self.save_gene_axis(canonical, self.cross_domain_gene_axis_path)
+        return filtered_df, canonical
+
     def load_gene_name_set(self) -> Optional[Set[str]]:
         """Load the cancer gene census list and its synonyms."""
         genes_df = pd.read_csv(self.census_gene_names_path)
@@ -414,8 +462,9 @@ class BaseDatasetCreator(ABC):
             arr = arr.astype(np.float32)
         return arr
 
-    def save_cell_line_features(self, dataset_df: pd.DataFrame, output_path: Path) -> Path:
-        """Save cell line features to a .npz lookup."""
+    def save_cell_line_features(self, dataset_df: pd.DataFrame, output_path: Path,
+                                gene_axis: Optional[List[str]] = None) -> Path:
+        """Save cell line features (and gene axis when provided) to a .npz lookup."""
         feature_df = (
             dataset_df[["cell_line_name", "cell_line_features"]]
             .dropna(subset=["cell_line_features"])
@@ -429,6 +478,8 @@ class BaseDatasetCreator(ABC):
             if arr is None:
                 continue
             lookup[cell_id] = arr
+        if gene_axis:
+            lookup["__gene_axis__"] = np.asarray(gene_axis, dtype=str)
         if not lookup:
             raise ValueError("No cell line features available to save.")
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -460,7 +511,8 @@ class BaseDatasetCreator(ABC):
             self.save_drug_response_features(dataset_df, self.drug_response_features_path)
 
         if write_lookup and "cell_line_features" in dataset_df.columns:
-            self.save_cell_line_features(dataset_df, self.cell_line_features_path)
+            gene_axis = getattr(self, "gene_axis", None)
+            self.save_cell_line_features(dataset_df, self.cell_line_features_path, gene_axis=gene_axis)
 
         return self.drug_response_features_path
 

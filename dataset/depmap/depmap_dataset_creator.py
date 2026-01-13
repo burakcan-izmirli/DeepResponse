@@ -225,6 +225,7 @@ class DepMapDatasetCreator(BaseDatasetCreator):
         cell_features, gene_axis = self.filter_genes_by_missing_values(cell_features, gene_axis)
         cell_features, gene_axis = self.filter_gene_axis_by_names(cell_features, gene_axis)
         cell_features = self.filter_cell_lines_by_missing_values(cell_features)
+        self.gene_axis = gene_axis
 
         ic50_df = self._load_drug_response_data()
         cell_features_lookup = dict(zip(cell_features['cell_line_name'], cell_features['cell_line_features']))

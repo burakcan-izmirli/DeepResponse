@@ -356,7 +356,7 @@ class CCLEDatasetCreator(BaseDatasetCreator):
 
     def create_drug_cell_dataframe(self, drug_list=None, drug_vocab=None, cell_list=None):
         """Create drug-cell pairs using PRISM repurposing response file."""
-        drug_cell_pairs_raw = pd.read_csv(self.drug_response_path)
+        drug_cell_pairs_raw = pd.read_csv(self.drug_response_path, low_memory=False)
         drug_cell_pairs_raw['drug_name'] = drug_cell_pairs_raw['name'].apply(BaseDatasetCreator.clean_string)
         combined_dict = drug_vocab[1] if drug_vocab else None
         if combined_dict:
@@ -365,11 +365,15 @@ class CCLEDatasetCreator(BaseDatasetCreator):
             )
         if drug_list:
             drug_list_clean = {BaseDatasetCreator.clean_string(name) for name in drug_list}
-            drug_cell_pairs_raw = drug_cell_pairs_raw[drug_cell_pairs_raw['drug_name'].isin(drug_list_clean)]
-        drug_cell_pairs_raw['cell_line_name'] = drug_cell_pairs_raw['depmap_id'].astype(str)
-        drug_cell_pairs_raw['smiles'] = drug_cell_pairs_raw.get('smiles')
+            drug_cell_pairs_raw = drug_cell_pairs_raw[
+                drug_cell_pairs_raw['drug_name'].isin(drug_list_clean)
+            ].copy()
+        drug_cell_pairs_raw.loc[:, 'cell_line_name'] = drug_cell_pairs_raw['depmap_id'].astype(str)
+        drug_cell_pairs_raw.loc[:, 'smiles'] = drug_cell_pairs_raw.get('smiles')
         if 'smiles' in drug_cell_pairs_raw.columns:
-            drug_cell_pairs_raw['smiles'] = drug_cell_pairs_raw['smiles'].apply(self.normalize_smiles_text)
+            drug_cell_pairs_raw.loc[:, 'smiles'] = drug_cell_pairs_raw['smiles'].apply(
+                self.normalize_smiles_text
+            )
 
         ic50_um = pd.to_numeric(drug_cell_pairs_raw.get('ic50'), errors='coerce')
         is_finite = np.isfinite(ic50_um.to_numpy())
@@ -479,6 +483,8 @@ class CCLEDatasetCreator(BaseDatasetCreator):
         drug_cell_smiles_df = drug_cell_smiles_df[
             drug_cell_smiles_df['cell_line_name'].isin(cell_line_features_df['cell_line_name'])
         ].copy()
+
+        self.gene_axis = gene_axis
 
         dataset = pd.merge(drug_cell_smiles_df, cell_line_features_df, how='inner')
         dataset = dataset[['drug_name', 'cell_line_name', 'pic50', 'smiles', 'cell_line_features']]

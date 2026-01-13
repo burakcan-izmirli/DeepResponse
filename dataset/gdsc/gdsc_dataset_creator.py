@@ -501,6 +501,7 @@ class GDSCDatasetCreator(BaseDatasetCreator):
                                                                cnv_lookup, methylation_lookup,)
         cell_line_features_df, gene_axis = self.filter_genes_by_missing_values(cell_line_features_df, gene_axis,)
         cell_line_features_df = self.filter_cell_lines_by_missing_values(cell_line_features_df,)
+        self.gene_axis = gene_axis
 
         dataset = records.merge(cell_line_features_df, on="cell_line_name", how="inner")
         dataset = dataset[["drug_name", "smiles", "cell_line_name", "cell_line_features", "pic50"]]
