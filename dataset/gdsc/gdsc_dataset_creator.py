@@ -26,9 +26,9 @@ class GDSCDatasetCreator(BaseDatasetCreator):
         self.cell_line_map_path = self.raw_dir / "gdsc_cell_lines.csv"
         self.expression_path = self.raw_dir / "gdsc_expression.csv"
         self.cnv_summary_path = self.raw_dir / "cnv_summary_20250207.csv"
+        self.mutation_path = self.raw_dir / "mutations_all_latest.csv"
         self.methylation_matrix_path = self.raw_dir / "F2_METH_CELL_DATA.txt"
         self.methylation_sample_map_path = self.raw_dir / "methSampleId_2_cosmicIds.csv"
-        self.project_score_fitness_path = self.raw_dir / "Project_score_combined_Sanger_v2_Broad_21Q2_fitness_scores_scaled_bayesian_factors_20250624.tsv"
         self.model_list_download_path = self.raw_dir / "model_list_20250630.csv"
 
         self.baseline_gdsc_ids = self.load_reference_drug_ids("gdsc_id")
@@ -196,94 +196,6 @@ class GDSCDatasetCreator(BaseDatasetCreator):
 
         return {depmap_id: out_mat[i].astype(np.float32, copy=False) for i, depmap_id in enumerate(selected_depmap_ids)}
 
-    def _load_crispr_lookup_from_project_score(self, gene_axis: List[str], depmap_ids: Set[str]) -> Dict[str, np.ndarray]:
-        """Load CRISPR dependency vectors from Project Score fitness scores."""
-        source_path = self.project_score_fitness_path
-        model_list = self._load_clean_table(self.model_list_download_path)
-        model_id_col = self._require_column(model_list.columns, {"modelid", "model_id"}, self.model_list_download_path, "model_id")
-        broad_col = self._require_column(model_list.columns, {"broadid", "broad_id"}, self.model_list_download_path, "broad_id")
-        model_list = model_list.dropna(subset=[model_id_col, broad_col]).copy()
-        model_list[model_id_col] = model_list[model_id_col].astype(str)
-        model_list[broad_col] = model_list[broad_col].astype(str)
-        model_to_depmap = dict(zip(model_list[model_id_col], model_list[broad_col]))
-
-        wanted = set(depmap_ids)
-
-        sep = "\t"
-        preview = pd.read_csv(source_path, sep=sep, nrows=6, low_memory=False)
-        first_col = preview.columns[0]
-        if "model_id" not in preview[first_col].astype(str).str.lower().tolist():
-            raise ValueError(f"Unrecognized Project Score format in {source_path} (missing 'model_id' metadata row).")
-
-        if len(preview.columns) < 5:
-            raise ValueError(f"Project Score file {source_path} has too few columns.")
-        gene_id_col = preview.columns[0]
-        symbol_col = preview.columns[1]
-        model_cols = list(preview.columns[3:])
-
-        model_id_row = preview.loc[preview[gene_id_col].astype(str).str.lower() == "model_id"].iloc[0]
-
-        depmap_to_model_cols: Dict[str, List[str]] = {}
-        for col in model_cols:
-            model_id = model_id_row.get(col)
-            if pd.isna(model_id):
-                continue
-            depmap_id = model_to_depmap.get(str(model_id))
-            if depmap_id is None:
-                continue
-            depmap_id = str(depmap_id)
-            if depmap_id not in wanted:
-                continue
-            depmap_to_model_cols.setdefault(depmap_id, []).append(col)
-
-        if not depmap_to_model_cols:
-            raise ValueError("Project Score file did not yield any matching depmap_ids. " 
-                             "Check that model_list_*.csv BROAD_IDs match the cells in your baseline.")
-
-        depmap_ids_order = sorted(depmap_to_model_cols.keys())
-        all_cols: List[str] = sorted({c for cols in depmap_to_model_cols.values() for c in cols})
-        col_index = {c: i for i, c in enumerate(all_cols)}
-        groups = [[col_index[c] for c in depmap_to_model_cols[depmap_id]] for depmap_id in depmap_ids_order]
-
-        gene_to_idx = {g: i for i, g in enumerate(gene_axis)}
-        mat = np.full((len(depmap_ids_order), len(gene_axis)), np.nan, dtype=np.float32)
-        seen: Set[str] = set()
-
-        meta_labels = {"model_id", "source", "qc_pass", "gene_id", "model_name"}
-
-        for chunk in pd.read_csv(source_path, sep=sep, chunksize=2000, low_memory=False):
-            chunk = chunk[~chunk[gene_id_col].astype(str).str.lower().isin(meta_labels)].copy()
-            if chunk.empty:
-                continue
-            chunk["_gene_clean"] = chunk[symbol_col].astype(str).apply(BaseDatasetCreator.clean_string)
-            chunk = chunk[chunk["_gene_clean"].isin(gene_to_idx)]
-            if chunk.empty:
-                continue
-            chunk = chunk.drop_duplicates(subset=["_gene_clean"])
-            chunk = chunk[~chunk["_gene_clean"].isin(seen)]
-            if chunk.empty:
-                continue
-
-            values = chunk[all_cols].apply(pd.to_numeric, errors="coerce").to_numpy(dtype=np.float32, copy=False)
-
-            agg = np.full((values.shape[0], len(depmap_ids_order)), np.nan, dtype=np.float32)
-            for i, idxs in enumerate(groups):
-                if len(idxs) == 1:
-                    agg[:, i] = values[:, idxs[0]]
-                else:
-                    with np.errstate(all="ignore"):
-                        agg[:, i] = np.nanmean(values[:, idxs], axis=1)
-
-            genes = chunk["_gene_clean"].to_numpy(dtype=str, copy=False)
-            for row_idx, g in enumerate(genes):
-                gi = gene_to_idx[g]
-                mat[:, gi] = agg[row_idx]
-                seen.add(g)
-            if len(seen) == len(gene_axis):
-                break
-
-        return {depmap_id: mat[i].astype(np.float32, copy=False) for i, depmap_id in enumerate(depmap_ids_order)}
-
     def _load_cnv_lookup(self, gene_axis: List[str], depmap_ids: Set[str], 
                          cosmic_to_depmap: Dict[str, str]) -> Dict[str, np.ndarray]:
         """Create gene-level CNV vectors from the GDSC CNV summary."""
@@ -327,6 +239,116 @@ class GDSCDatasetCreator(BaseDatasetCreator):
                 continue
             lookup[depmap_id][idx] = value
         return lookup
+
+    def _load_mutation_lookup(self, gene_axis: List[str], depmap_ids: Set[str],
+                              cosmic_to_depmap: Dict[str, str]) -> Dict[str, np.ndarray]:
+        """Create per-cell binary mutation vectors aligned to gene_axis."""
+        if not self.mutation_path.exists():
+            raise FileNotFoundError(f"Mutation file not found: {self.mutation_path}")
+
+        gene_axis = list(gene_axis)
+        gene_set = set(gene_axis)
+        axis_index = {g: i for i, g in enumerate(gene_axis)}
+        depmap_ids = set(depmap_ids)
+        gene_count = len(gene_axis)
+        lookup = {depmap_id: np.zeros(gene_count, dtype=np.float32) for depmap_id in depmap_ids}
+
+        header = self._read_header_fields(self.mutation_path, delimiter=",")
+        header_map = {self.clean_string(col): col for col in header}
+        model_col = header_map.get("model_id") or header_map.get("modelid")
+        cosmic_col = header_map.get("cosmic_id") or header_map.get("cosmicid")
+        gene_col = (
+            header_map.get("gene_name")
+            or header_map.get("genename")
+            or header_map.get("gene_symbol")
+            or header_map.get("genesymbol")
+        )
+        protein_col = header_map.get("protein_mutation")
+        coding_col = header_map.get("coding")
+        if gene_col is None:
+            raise ValueError(f"Mutation file missing gene column: {self.mutation_path}")
+
+        model_to_cosmic = None
+        usecols = []
+        if model_col is not None:
+            model_list = self._load_clean_table(self.model_list_download_path)
+            model_id_col = self._require_column(
+                model_list.columns, {"modelid", "model_id"}, self.model_list_download_path, "model_id"
+            )
+            cosmic_id_col = self._require_column(
+                model_list.columns, {"cosmicid", "cosmic_id"}, self.model_list_download_path, "cosmic_id"
+            )
+            model_list = model_list.dropna(subset=[model_id_col, cosmic_id_col]).copy()
+            model_list[model_id_col] = model_list[model_id_col].astype(str)
+            model_list[cosmic_id_col] = model_list[cosmic_id_col].astype(str)
+            model_to_cosmic = dict(zip(model_list[model_id_col], model_list[cosmic_id_col]))
+            usecols = [model_col, gene_col]
+        elif cosmic_col is not None:
+            usecols = [cosmic_col, gene_col]
+        else:
+            raise ValueError(f"Mutation file missing model_id/cosmic_id columns: {self.mutation_path}")
+
+        if protein_col is not None:
+            usecols.append(protein_col)
+        if coding_col is not None:
+            usecols.append(coding_col)
+
+        for chunk in pd.read_csv(self.mutation_path, usecols=usecols, chunksize=200000, low_memory=False):
+            chunk = chunk.dropna(subset=usecols)
+            if chunk.empty:
+                continue
+            mask = pd.Series(True, index=chunk.index, dtype=bool)
+            if coding_col is not None:
+                coding = chunk[coding_col].astype(str).str.strip().str.lower()
+                mask &= coding.isin({"t", "true", "1", "yes"})
+            if protein_col is not None:
+                prot_str = chunk[protein_col].astype(str).str.strip()
+                mask &= prot_str.ne("") & ~prot_str.eq("-") & ~prot_str.str.contains(r"p\.=", na=False)
+            chunk = chunk[mask].copy()
+            if chunk.empty:
+                continue
+            chunk[gene_col] = chunk[gene_col].astype(str).apply(BaseDatasetCreator.clean_string)
+            chunk = chunk[chunk[gene_col].isin(gene_set)]
+            if chunk.empty:
+                continue
+            if model_col is not None:
+                chunk[model_col] = chunk[model_col].astype(str)
+                chunk["cosmic_id"] = chunk[model_col].map(model_to_cosmic)
+                chunk = chunk.dropna(subset=["cosmic_id"])
+            else:
+                chunk["cosmic_id"] = chunk[cosmic_col].astype(str)
+            if chunk.empty:
+                continue
+            chunk["depmap_id"] = chunk["cosmic_id"].map(cosmic_to_depmap)
+            chunk = chunk[chunk["depmap_id"].isin(depmap_ids)]
+            if chunk.empty:
+                continue
+            pairs = chunk[["depmap_id", gene_col]].drop_duplicates()
+            for depmap_id, gene in pairs.itertuples(index=False):
+                lookup[depmap_id][axis_index[gene]] = 1.0
+        return lookup
+
+    @staticmethod
+    def _apply_cnv_log2_ratio_lookup(cnv_lookup: Dict[str, np.ndarray], eps: float = 1e-3) -> Dict[str, np.ndarray]:
+        logger.info("Applying log2(CN/2) transform to GDSC CNV.")
+        for depmap_id, arr in cnv_lookup.items():
+            if arr is None:
+                continue
+            clipped = np.maximum(arr, eps)
+            with np.errstate(divide="ignore", invalid="ignore"):
+                cnv_lookup[depmap_id] = np.log2(clipped / 2.0).astype(np.float32, copy=False)
+        return cnv_lookup
+
+    @staticmethod
+    def _apply_methylation_m_value_lookup(methylation_lookup: Dict[str, np.ndarray], eps: float = 1e-3) -> Dict[str, np.ndarray]:
+        logger.info("Applying M-value transform to GDSC methylation.")
+        for depmap_id, arr in methylation_lookup.items():
+            if arr is None:
+                continue
+            arr = np.clip(arr.astype(np.float32, copy=False), eps, 1.0 - eps)
+            with np.errstate(divide="ignore", invalid="ignore"):
+                methylation_lookup[depmap_id] = np.log2(arr / (1.0 - arr)).astype(np.float32, copy=False)
+        return methylation_lookup
 
     def _resolve_response_columns(self, resp: pd.DataFrame) -> Tuple[str, str, str, Optional[str]]:
         """Resolve required response columns."""
@@ -441,15 +463,16 @@ class GDSCDatasetCreator(BaseDatasetCreator):
         return expr
 
     def _build_cell_line_features(self, expr: pd.DataFrame, gene_axis: List[str], depmap_ids: Set[str],
-                                  crispr_lookup: Dict[str, np.ndarray], cnv_lookup: Dict[str, np.ndarray],
+                                  mutation_lookup: Dict[str, np.ndarray],
+                                  cnv_lookup: Dict[str, np.ndarray],
                                   methylation_lookup: Dict[str, np.ndarray]) -> pd.DataFrame:
         """Assemble multi-omics tensors per cell line."""
         cells_with_expression = set(expr.columns.astype(str))
-        cells_with_crispr = set(crispr_lookup.keys())
+        cells_with_mutation = set(mutation_lookup.keys())
         cells_with_cnv = set(cnv_lookup.keys())
         cells_with_meth = set(methylation_lookup.keys())
 
-        all_cells = cells_with_expression.union(cells_with_crispr).union(cells_with_cnv).union(cells_with_meth)
+        all_cells = cells_with_expression.union(cells_with_mutation).union(cells_with_cnv).union(cells_with_meth)
         eligible_cells = all_cells.intersection(depmap_ids)
         if not eligible_cells:
             raise ValueError("No GDSC cells with omics + drug response after alignment.")
@@ -461,9 +484,9 @@ class GDSCDatasetCreator(BaseDatasetCreator):
             else:
                 gene_expression = np.full(len(gene_axis), np.nan, dtype=np.float32)
 
-            crispr = crispr_lookup.get(depmap_id)
-            if crispr is None:
-                crispr = np.full(len(gene_axis), np.nan, dtype=np.float32)
+            mut = mutation_lookup.get(depmap_id)
+            if mut is None:
+                mut = np.zeros(len(gene_axis), dtype=np.float32)
 
             cnv = cnv_lookup.get(depmap_id)
             if cnv is None:
@@ -473,7 +496,7 @@ class GDSCDatasetCreator(BaseDatasetCreator):
             if meth is None:
                 meth = np.full(len(gene_axis), np.nan, dtype=np.float32)
 
-            tensor = np.stack([gene_expression, crispr, cnv, meth], axis=1).astype(np.float32, copy=False)
+            tensor = np.stack([gene_expression, mut, cnv, meth], axis=1).astype(np.float32, copy=False)
             if np.isnan(tensor).all():
                 continue
             cell_features.append({
@@ -494,11 +517,19 @@ class GDSCDatasetCreator(BaseDatasetCreator):
                              f"at {self.cell_line_map_path}.")
 
         cnv_lookup = self._load_cnv_lookup(gene_axis, depmap_ids_requested, cosmic_to_depmap)
-        crispr_lookup = self._load_crispr_lookup_from_project_score(gene_axis, depmap_ids_requested)
+        cnv_lookup = self._apply_cnv_log2_ratio_lookup(cnv_lookup)
+        mutation_lookup = self._load_mutation_lookup(gene_axis, depmap_ids_requested, cosmic_to_depmap)
         methylation_lookup = self._load_methylation_lookup_from_f2(gene_axis, depmap_ids_requested, cosmic_to_depmap,)
+        methylation_lookup = self._apply_methylation_m_value_lookup(methylation_lookup)
 
-        cell_line_features_df = self._build_cell_line_features(expr, gene_axis, depmap_ids_requested, crispr_lookup,
-                                                               cnv_lookup, methylation_lookup,)
+        cell_line_features_df = self._build_cell_line_features(
+            expr,
+            gene_axis,
+            depmap_ids_requested,
+            mutation_lookup,
+            cnv_lookup,
+            methylation_lookup,
+        )
         cell_line_features_df, gene_axis = self.filter_genes_by_missing_values(cell_line_features_df, gene_axis,)
         cell_line_features_df = self.filter_cell_lines_by_missing_values(cell_line_features_df,)
         self.gene_axis = gene_axis

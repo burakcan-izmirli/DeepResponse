@@ -26,9 +26,9 @@ class CCLEDatasetCreator(BaseDatasetCreator):
         self.expression_path = self.raw_dir / "CCLE_RNAseq_rsem_genes_tpm_20180929.txt"
         self.methylation_path = self.raw_dir / "CCLE_RRBS_TSS1kb_20181022.txt"
         self.cnv_path = self.raw_dir / "CCLE_ABSOLUTE_combined_20181227.csv"
+        self.mutation_path = self.raw_dir / "OmicsSomaticMutations.csv"
         self.drug_response_path = self.raw_dir / "prism-repurposing-20q2-secondary-screen-dose-response-curve-parameters.csv"
         self.cell_map_path = self.raw_dir / "Cell_lines_annotations_20181226.txt"
-        self.crispr_path = self.raw_dir / "CRISPRGeneDependency.csv"
         self.baseline_cell_lines = self.load_reference_cell_lines()
 
     def load_cell_line_map(self):
@@ -153,6 +153,27 @@ class CCLEDatasetCreator(BaseDatasetCreator):
         return mean_df.astype(np.float32)
 
     @staticmethod
+    def _apply_cnv_log2_ratio(cnv_matrix, eps=1e-3):
+        cnv = cnv_matrix.astype(np.float32)
+        cnv = cnv.clip(lower=eps)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            cnv = np.log2(cnv / 2.0)
+        logger.info("Applied log2(CN/2) transform to CCLE CNV.")
+        return cnv
+
+    @staticmethod
+    def _apply_methylation_m_value(meth_matrix, eps=1e-3):
+        meth = meth_matrix.astype(np.float32)
+        values = meth.to_numpy()
+        if not np.isfinite(values).any():
+            return meth
+        logger.info("Applying M-value transform to CCLE methylation.")
+        meth = meth.clip(lower=eps, upper=1.0 - eps)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            meth = np.log2(meth / (1.0 - meth))
+        return meth
+
+    @staticmethod
     def _init_cnv_matrix(gene_axis, cell_list):
         if cell_list is None:
             return None, {}, None
@@ -177,16 +198,6 @@ class CCLEDatasetCreator(BaseDatasetCreator):
             if chunk.empty:
                 continue
             yield chunk
-
-    @staticmethod
-    def clean_crispr_gene_columns(columns):
-        cleaned = []
-        for col in columns:
-            if col.lower().startswith('unnamed'):
-                cleaned.append('cell_line_name')
-                continue
-            cleaned.append(col.split(' (')[0])
-        return cleaned
 
     def _iter_gtf_gene_rows(self):
         """Yield (chrom, start, end, strand, attrs) tuples for gene features in the GTF."""
@@ -264,26 +275,62 @@ class CCLEDatasetCreator(BaseDatasetCreator):
             lookup[depmap_id] = expr_df[col].to_numpy(dtype=np.float32, copy=False)
         return lookup
 
-    @staticmethod
-    def _build_crispr_lookup(crispr_raw, gene_axis):
-        gene_cols = [c for c in crispr_raw.columns if c != 'ModelID']
-        crispr = crispr_raw.drop_duplicates(subset=['ModelID'], keep='first').copy()
-        crispr = crispr.rename(columns={col: BaseDatasetCreator.clean_string(col) for col in gene_cols})
-        crispr = crispr.loc[:, ~crispr.columns.duplicated()].set_index('ModelID')
-        crispr = crispr.apply(pd.to_numeric, errors='coerce')
-        crispr = crispr.reindex(columns=gene_axis)
-        values = crispr.to_numpy(dtype=np.float32)
-        return {model_id: values[i] for i, model_id in enumerate(crispr.index.astype(str))}
+    def _load_mutation_lookup(self, gene_axis, cell_list=None):
+        """Create per-cell binary mutation vectors aligned to gene_axis."""
+        gene_axis = list(gene_axis)
+        gene_set = set(gene_axis)
+        axis_index = {g: i for i, g in enumerate(gene_axis)}
+        wanted_cells = set(cell_list) if cell_list is not None else None
 
-    def _build_cell_feature_array(self, cell_line_depmap, gene_axis, expr_lookup, crispr_lookup, cnv_lookup, meth_lookup):
+        gene_count = len(gene_axis)
+        lookup = (
+            {cell: np.zeros(gene_count, dtype=np.float32) for cell in wanted_cells}
+            if wanted_cells is not None
+            else {}
+        )
+
+        header = self._read_header_fields(self.mutation_path, delimiter=",")
+        header_map = {BaseDatasetCreator.clean_string(col): col for col in header}
+        model_col = header_map.get("modelid") or "ModelID"
+        gene_col = header_map.get("hugosymbol") or "HugoSymbol"
+        protein_col = header_map.get("proteinchange")
+
+        usecols = [model_col, gene_col] + ([protein_col] if protein_col is not None else [])
+        for chunk in pd.read_csv(self.mutation_path, usecols=usecols, chunksize=200_000, low_memory=False):
+            chunk = chunk.dropna(subset=[model_col, gene_col])
+            if chunk.empty:
+                continue
+            if protein_col is not None:
+                prot_str = chunk[protein_col].astype(str).str.strip()
+                mask = prot_str.ne("") & ~prot_str.eq("-") & ~prot_str.str.contains(r"p\.=", na=False)
+                chunk = chunk[mask]
+                if chunk.empty:
+                    continue
+            chunk[model_col] = chunk[model_col].astype(str)
+            chunk[gene_col] = chunk[gene_col].astype(str).apply(BaseDatasetCreator.clean_string)
+            chunk = chunk[chunk[gene_col].isin(gene_set)]
+            if wanted_cells is not None:
+                chunk = chunk[chunk[model_col].isin(wanted_cells)]
+            if chunk.empty:
+                continue
+            pairs = chunk[[model_col, gene_col]].drop_duplicates()
+            for model_id, gene in pairs.itertuples(index=False):
+                arr = lookup.get(model_id)
+                if arr is None:
+                    arr = np.zeros(gene_count, dtype=np.float32)
+                    lookup[model_id] = arr
+                arr[axis_index[gene]] = 1.0
+        return lookup
+
+    def _build_cell_feature_array(self, cell_line_depmap, gene_axis, expr_lookup, mutation_lookup, cnv_lookup, meth_lookup):
         gene_count = len(gene_axis)
         expr_arr = expr_lookup.get(cell_line_depmap)
         if expr_arr is None:
             expr_arr = np.full(gene_count, np.nan, dtype=np.float32)
 
-        crispr_arr = crispr_lookup.get(cell_line_depmap)
-        if crispr_arr is None:
-            crispr_arr = np.full(gene_count, np.nan, dtype=np.float32)
+        mut_arr = mutation_lookup.get(cell_line_depmap)
+        if mut_arr is None:
+            mut_arr = np.zeros(gene_count, dtype=np.float32)
 
         cnv_arr = cnv_lookup.get(cell_line_depmap)
         if cnv_arr is None:
@@ -293,36 +340,29 @@ class CCLEDatasetCreator(BaseDatasetCreator):
         if meth_arr is None:
             meth_arr = np.full(gene_count, np.nan, dtype=np.float32)
 
-        arr = np.stack([expr_arr, crispr_arr, cnv_arr, meth_arr], axis=1)
+        arr = np.stack([expr_arr, mut_arr, cnv_arr, meth_arr], axis=1)
         if np.isnan(arr).all():
             return None
         return arr
 
-    def _build_cell_features_df(self, cell_lines, gene_axis, expr_lookup, crispr_lookup, cnv_lookup, meth_lookup):
+    def _build_cell_features_df(self, cell_lines, gene_axis, expr_lookup, mutation_lookup, cnv_lookup, meth_lookup):
         cell_features = []
         for cell_line in tqdm(cell_lines):
             arr = self._build_cell_feature_array(
-                cell_line, gene_axis, expr_lookup, crispr_lookup, cnv_lookup, meth_lookup
+                cell_line, gene_axis, expr_lookup, mutation_lookup, cnv_lookup, meth_lookup
             )
             if arr is None:
                 continue
             cell_features.append({'cell_line_name': cell_line, 'cell_line_features': arr})
         return pd.DataFrame(cell_features)
 
-    def _load_crispr_data(self):
-        crispr_raw = pd.read_csv(self.crispr_path)
-        crispr_raw.columns = self.clean_crispr_gene_columns(crispr_raw.columns)
-        crispr_raw.rename(columns={'cell_line_name': 'ModelID'}, inplace=True)
-        crispr_raw['ModelID'] = crispr_raw['ModelID'].astype(str)
-        return crispr_raw
-
     @staticmethod
-    def _filter_eligible_cells(expr_cells, crispr_cells, meth_cells, cnv_cells, cells_with_drug_response):
-        all_ccle_cells = expr_cells.union(crispr_cells, meth_cells, cnv_cells)
+    def _filter_eligible_cells(expr_cells, mutation_cells, meth_cells, cnv_cells, cells_with_drug_response):
+        all_ccle_cells = expr_cells.union(mutation_cells, meth_cells, cnv_cells)
         eligible_cells = all_ccle_cells.intersection(cells_with_drug_response)
         logger.info(
-            "CCLE cells by omics: expr=%d, crispr=%d, cnv=%d, meth=%d, union=%d, with_drug_response=%d",
-            len(expr_cells), len(crispr_cells), len(cnv_cells), len(meth_cells),
+            "CCLE cells by omics: expr=%d, mutation=%d, cnv=%d, meth=%d, union=%d, with_drug_response=%d",
+            len(expr_cells), len(mutation_cells), len(cnv_cells), len(meth_cells),
             len(all_ccle_cells), len(eligible_cells)
         )
         return eligible_cells
@@ -350,6 +390,9 @@ class CCLEDatasetCreator(BaseDatasetCreator):
 
         # Deduplicate after cleaning to ensure unique index for fast lookup.
         expr_df = expr_df.groupby('gene_name', as_index=False)[numeric_cols].mean()
+        # Align CCLE TPM-scale expression with GDSC's log-scale values.
+        numeric_cols = [c for c in expr_df.columns if c != 'gene_name']
+        expr_df[numeric_cols] = np.log2(expr_df[numeric_cols].astype(float) + 1.0)
 
         cell_map = self.load_cell_line_map()
         return expr_df['gene_name'].tolist(), expr_df, cell_map
@@ -439,20 +482,20 @@ class CCLEDatasetCreator(BaseDatasetCreator):
         expr_df, expr_col_by_cell = self._filter_expression_cells(expr_df, cell_map, cell_list)
         expr_lookup = self._build_expression_lookup(expr_df, expr_col_by_cell, gene_axis)
 
-        crispr_raw = self._load_crispr_data()
-        crispr_lookup = self._build_crispr_lookup(crispr_raw, gene_axis)
-
         meth_matrix = self.load_ccle_rrbs_gene_matrix(gene_axis, cell_map, cell_list=cell_list)
         cnv_matrix = self.load_ccle_absolute_gene_cnv(gene_axis, cell_list=cell_list)
+        mutation_lookup = self._load_mutation_lookup(gene_axis, cell_list=cell_list)
+        cnv_matrix = self._apply_cnv_log2_ratio(cnv_matrix, source="CCLE")
+        meth_matrix = self._apply_methylation_m_value(meth_matrix)
 
         cells_with_expression = set(expr_col_by_cell.keys())
-        cells_with_crispr = set(crispr_lookup.keys())
+        cells_with_mutation = set(mutation_lookup.keys())
         cells_with_meth = set(meth_matrix.columns.astype(str))
         cells_with_cnv = set(cnv_matrix.columns.astype(str))
         cells_with_drug_response = set(drug_cell_smiles_df['cell_line_name'].unique())
         eligible_cells = self._filter_eligible_cells(
             cells_with_expression,
-            cells_with_crispr,
+            cells_with_mutation,
             cells_with_meth,
             cells_with_cnv,
             cells_with_drug_response,
@@ -467,7 +510,7 @@ class CCLEDatasetCreator(BaseDatasetCreator):
             drug_cell_smiles_df['cell_line_name'].unique(),
             gene_axis,
             expr_lookup,
-            crispr_lookup,
+            mutation_lookup,
             cnv_lookup,
             meth_lookup,
         )
