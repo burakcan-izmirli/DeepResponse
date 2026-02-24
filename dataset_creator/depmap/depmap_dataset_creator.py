@@ -9,7 +9,7 @@ from typing import Dict, List, Tuple
 import numpy as np
 import pandas as pd
 
-from dataset.common import BaseDatasetCreator
+from dataset_creator.common import BaseDatasetCreator
 
 logger = logging.getLogger(__name__)
 

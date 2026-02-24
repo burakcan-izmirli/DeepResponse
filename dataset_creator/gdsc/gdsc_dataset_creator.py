@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from dataset.common import BaseDatasetCreator
+from dataset_creator.common import BaseDatasetCreator
 
 logger = logging.getLogger(__name__)
 
