@@ -2,4 +2,4 @@
 
 from .common_dataset_creator import BaseDatasetCreator
 
-__all__ = ['BaseDatasetCreator']
+__all__ = ["BaseDatasetCreator"]
