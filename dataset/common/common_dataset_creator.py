@@ -49,9 +49,7 @@ class BaseDatasetCreator(ABC):
             self.reference_dir / "ccle_gdsc_gene_intersection.csv"
         )
         self.gencode_gtf_path = self.reference_dir / "gencode_v19_genes.gtf"
-        self.l1000_genes_path = (
-            self.base_dir.parent / "depmap" / "raw" / "l1000_genes.txt"
-        )
+        self.l1000_genes_path = self.reference_dir / "l1000_genes.txt"
         self.gdsc_expression_reference_path = (
             self.base_dir.parent / "gdsc" / "raw" / "gdsc_expression.csv"
         )
