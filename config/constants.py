@@ -40,7 +40,7 @@ RANKING_GROUP_MODES: Set[str] = {
 }
 ALLOWED_CHECKPOINT_METRICS: Set[str] = {"auto", "val_loss", "val_r2"}
 
-# --- 1b. Internal Fixed Defaults (not exposed in public CLI) ---
+# --- 1b. Internal Fixed Defaults  ---
 DEFAULT_BOUNDED_OUTPUT_MODE: str = "train_stats_fixed"
 DEFAULT_BOUNDED_OUTPUT_CENTER: float = 0.0
 DEFAULT_BOUNDED_OUTPUT_SCALE: float = 10.0
