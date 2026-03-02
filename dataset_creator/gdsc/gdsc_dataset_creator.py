@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from dataset.common import BaseDatasetCreator
+from dataset_creator.common import BaseDatasetCreator
 
 logger = logging.getLogger(__name__)
 
@@ -50,9 +50,21 @@ class GDSCDatasetCreator(BaseDatasetCreator):
     ) -> Dict[str, str]:
         """Load COSMIC->DepMap mapping."""
         df = self._load_clean_table(self.cell_line_map_path)
-        df = df.dropna(subset=[cosmic_col, depmap_col]).copy()
-        cosmic_series = df[cosmic_col].astype(str)
-        depmap_series = df[depmap_col].astype(str)
+        cosmic_col_resolved = self._require_column(
+            df.columns,
+            {cosmic_col, "cosmic_id", "cosmicid"},
+            self.cell_line_map_path,
+            "cosmic_id",
+        )
+        depmap_col_resolved = self._require_column(
+            df.columns,
+            {depmap_col, "depmap_id", "depmapid"},
+            self.cell_line_map_path,
+            "depmap_id",
+        )
+        df = df.dropna(subset=[cosmic_col_resolved, depmap_col_resolved]).copy()
+        cosmic_series = df[cosmic_col_resolved].astype(str)
+        depmap_series = df[depmap_col_resolved].astype(str)
         return dict(zip(cosmic_series, depmap_series))
 
     @staticmethod

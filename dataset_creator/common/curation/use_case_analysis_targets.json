@@ -15,5 +15,5 @@
       ]
     }
   ],
-  "cell_line_mapping_csv": "dataset/common/curation/reference_cell_line_list.csv"
+  "cell_line_mapping_csv": "dataset_creator/common/curation/reference_cell_line_list.csv"
 }
