@@ -922,7 +922,10 @@ class BaseDatasetCreator(ABC):
             raise ValueError(
                 f"Cannot create drug response records; missing columns: {missing}"
             )
-        records_df = dataset_df[required_cols].dropna()
+        export_cols = list(required_cols)
+        if "drug_id" in dataset_df.columns:
+            export_cols.append("drug_id")
+        records_df = dataset_df[export_cols].dropna(subset=required_cols)
         records_df = self._reorder_columns(records_df, self.DATASET_COLUMN_ORDER)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         records_df.to_csv(output_path, index=False)
