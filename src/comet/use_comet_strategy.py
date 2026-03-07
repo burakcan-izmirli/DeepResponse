@@ -1,5 +1,4 @@
 """ Use comet strategy"""
-from comet_ml import Experiment
 import logging
 import os
 from dotenv import load_dotenv
@@ -12,6 +11,8 @@ class UseCometStrategy(BaseCometStrategy):
 
     def integrate_comet(self):
         """ Using Comet to monitor results """
+        from comet_ml import Experiment
+
         logging.info("Comet was integrated successfully.")
         load_dotenv('./dev.env')
         return Experiment(api_key=os.environ.get("api_key"),

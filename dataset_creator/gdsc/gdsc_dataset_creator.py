@@ -720,8 +720,13 @@ class GDSCDatasetCreator(BaseDatasetCreator):
     ) -> pd.DataFrame:
         """Compute pic50, remove unsafe pairs, and keep one median row per (smiles, cell)."""
         merged["pic50"] = -np.log10(merged[ic50_col] * 1e-6)
+        keep_cols = ["cell_line_name", "drug_name", "smiles", "pic50"]
+        if "drug_id" in merged.columns:
+            keep_cols.append("drug_id")
         records = (
-            merged[["cell_line_name", "drug_name", "smiles", "pic50"]].dropna().copy()
+            merged[keep_cols]
+            .dropna(subset=["cell_line_name", "drug_name", "smiles", "pic50"])
+            .copy()
         )
         records = self._aggregate_molecule_cell_pic50(
             records, variance_threshold_log=1.0
@@ -968,9 +973,16 @@ class GDSCDatasetCreator(BaseDatasetCreator):
         self.gene_axis = gene_axis
 
         dataset = records.merge(cell_line_features_df, on="cell_line_name", how="inner")
-        dataset = dataset[
-            ["drug_name", "smiles", "cell_line_name", "cell_line_features", "pic50"]
+        final_cols = [
+            "drug_name",
+            "smiles",
+            "cell_line_name",
+            "cell_line_features",
+            "pic50",
         ]
+        if "drug_id" in dataset.columns:
+            final_cols.append("drug_id")
+        dataset = dataset[final_cols]
         dataset = dataset.dropna(
             subset=["drug_name", "cell_line_name", "pic50", "cell_line_features"]
         )
