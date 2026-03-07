@@ -67,7 +67,7 @@ class PredictionManager:
         data_source: str,
         device: str,
         config_path: str = "config/repurposing_candidates.json",
-        shared_axis_path: str = "dataset_creator/common/curation/ccle_gdsc_gene_intersection.csv",
+        shared_axis_path: str = "dataset_creator/common/curation/l1000_genes.txt",
         predictions_filename: str = "repurposing_candidates_predictions.csv",
     ) -> None:
         self.data_source = str(data_source).lower()
@@ -160,7 +160,10 @@ class PredictionManager:
         if not self.shared_axis_path.exists():
             logging.warning("Shared L1000 axis file not found: %s", self.shared_axis_path)
             return
-        axis_df = pd.read_csv(self.shared_axis_path)
+        if self.shared_axis_path.suffix.lower() == ".txt":
+            axis_df = pd.read_csv(self.shared_axis_path, header=None)
+        else:
+            axis_df = pd.read_csv(self.shared_axis_path)
         if axis_df.empty:
             return
         first_col = axis_df.columns[0]
