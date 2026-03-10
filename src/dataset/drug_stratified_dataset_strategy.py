@@ -1,190 +1,411 @@
-""" Drug stratified dataset strategy """
-import logging
-import pandas as pd
-import numpy as np
-from sklearn.model_selection import train_test_split, StratifiedShuffleSplit
+"""Drug stratified dataset strategy."""
 
-from helper.enum.dataset.n_split import NSplit
-from helper.enum.dataset.split_ratio import SplitRatio
+import logging
+from typing import Any, Dict, Iterator, Optional, Tuple
+
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import KFold
+
+from config.constants import TEST_SPLIT_RATIO, VALIDATION_SPLIT_RATIO
 from src.dataset.base_dataset_strategy import BaseDatasetStrategy
+
+MIN_SPLIT_SAMPLES = 20
+MIN_SAMPLES_PER_DRUG = 2
+MIN_TRAIN_VAL_IDENTITIES = 2
+MIN_HARD_VALIDATION_IDENTITIES = 3
 
 
 class DrugStratifiedDatasetStrategy(BaseDatasetStrategy):
-    """ Drug stratified dataset strategy """
+    """Drug stratified dataset strategy."""
 
-    def read_and_shuffle_dataset(self, random_state):
-        """ Read and shuffle dataset """
-        logging.info("Reading and shuffling dataset for drug-stratified split...")
-        try:
-            dataset_raw = pd.read_pickle(self.data_path)
-        except FileNotFoundError:
-            logging.error(f"Dataset file not found at: {self.data_path}")
-            raise
+    def _filter_rare_identities(self, dataset_df: pd.DataFrame) -> pd.DataFrame:
+        """Filter out drug identities with too few samples."""
+        identity_counts = dataset_df["drug_identity"].value_counts()
+        valid_identities = identity_counts[
+            identity_counts >= MIN_SAMPLES_PER_DRUG
+        ].index
 
-        dataset_raw = dataset_raw.sample(frac=1, random_state=random_state).reset_index(drop=True)
-        logging.info(f"Dataset loaded with {len(dataset_raw)} samples.")
-        return {'dataset': dataset_raw, 'evaluation_dataset': None}
+        logging.info(
+            "Drug identity filtering: total=%d, kept(min_samples=%d)=%d, removed=%d",
+            len(identity_counts),
+            MIN_SAMPLES_PER_DRUG,
+            len(valid_identities),
+            len(identity_counts) - len(valid_identities),
+        )
 
-    def create_splitter(self, dataset):
-        """ Returns None as splitter is not used in single-fold strategy. """
-        return None
+        return dataset_df[dataset_df["drug_identity"].isin(valid_identities)].copy()
 
-    def split_dataset(self, dataset_df, random_state):
-        """
-        Uses stratified splitting to maintain drug distribution across splits.
-        """
-        logging.info("Splitting dataset based on drug names with validation safeguards.")
-        
-        # Filter out drugs with insufficient samples
-        min_samples_per_drug = 5  # Minimum samples per drug for reliable statistics
-        drug_counts = dataset_df['drug_name'].value_counts()
-        valid_drugs = drug_counts[drug_counts >= min_samples_per_drug].index
-        
-        logging.info(f"Total drugs: {len(drug_counts)}")
-        logging.info(f"Drugs with ≥{min_samples_per_drug} samples: {len(valid_drugs)}")
-        logging.info(f"Filtered out {len(drug_counts) - len(valid_drugs)} drugs with insufficient samples")
-        
-        # Filter dataset to only include drugs with sufficient samples
-        filtered_df = dataset_df[dataset_df['drug_name'].isin(valid_drugs)].copy()
-        logging.info(f"Dataset size after filtering: {len(filtered_df)} samples")
-        
+    def _split_train_val_identities(
+        self,
+        train_val_identities: list[str],
+        filtered_df: pd.DataFrame,
+        val_count: int,
+        rng: np.random.Generator,
+    ) -> Tuple[set[str], set[str]]:
+        """Split train/validation identities with optional hardness-aware validation."""
+        if len(train_val_identities) < MIN_TRAIN_VAL_IDENTITIES:
+            raise ValueError(
+                "Train/validation identity pool must contain at least 2 identities."
+            )
+
+        val_count = min(max(1, int(val_count)), len(train_val_identities) - 1)
+        perm_ids = rng.permutation(train_val_identities)
+
+        if self.hard_validation and (
+            len(train_val_identities) >= MIN_HARD_VALIDATION_IDENTITIES
+        ):
+            target_val_rows = max(1, int(len(filtered_df) * VALIDATION_SPLIT_RATIO))
+            (
+                train_identities,
+                val_identities,
+                val_rows,
+                hardness_scores,
+            ) = self._select_hard_validation_identities(
+                filtered_df,
+                train_val_identities,
+                val_count,
+                target_val_rows,
+                rng,
+            )
+            if not val_identities or not train_identities:
+                logging.warning(
+                    "Hard validation selection failed; falling back to random identity split."
+                )
+                val_identities = set(perm_ids[:val_count])
+                train_identities = set(perm_ids[val_count:])
+            else:
+                avg_val_hardness = float(
+                    np.mean(
+                        [
+                            hardness_scores.get(str(identity), 0.0)
+                            for identity in val_identities
+                        ]
+                    )
+                )
+                avg_train_hardness = float(
+                    np.mean(
+                        [
+                            hardness_scores.get(str(identity), 0.0)
+                            for identity in train_identities
+                        ]
+                    )
+                )
+                logging.info(
+                    "Hard validation enabled (drug_stratified): val identities=%d, val rows=%d, "
+                    "avg_val_hardness=%.3f, avg_train_hardness=%.3f",
+                    len(val_identities),
+                    val_rows,
+                    avg_val_hardness,
+                    avg_train_hardness,
+                )
+            return train_identities, val_identities
+
+        val_identities = set(perm_ids[:val_count])
+        train_identities = set(perm_ids[val_count:])
+        return train_identities, val_identities
+
+    def _validate_no_identity_overlap(
+        self,
+        train_df: pd.DataFrame,
+        val_df: pd.DataFrame,
+        test_df: pd.DataFrame,
+    ) -> None:
+        """Validate that drug identities are disjoint across splits."""
+        train_ids = set(train_df["drug_identity"].unique())
+        val_ids = set(val_df["drug_identity"].unique())
+        test_ids = set(test_df["drug_identity"].unique())
+
+        overlap_train_val = train_ids & val_ids
+        overlap_train_test = train_ids & test_ids
+        overlap_val_test = val_ids & test_ids
+
+        if overlap_train_val:
+            raise ValueError(
+                f"Drug-identity overlap between train and val: {len(overlap_train_val)}"
+            )
+        if overlap_train_test:
+            raise ValueError(
+                f"Drug-identity overlap between train and test: {len(overlap_train_test)}"
+            )
+        if overlap_val_test:
+            raise ValueError(
+                f"Drug-identity overlap between val and test: {len(overlap_val_test)}"
+            )
+
+    def split_dataset(
+        self, dataset_df: pd.DataFrame, random_state: Optional[int]
+    ) -> Tuple[pd.DataFrame, ...]:
+        """Split dataset by disjoint drug identities."""
+        logging.info(
+            "Splitting dataset into train, validation, and test sets by drug identities."
+        )
+        dataset_df = self._with_drug_identity(dataset_df)
+        filtered_df = self._filter_rare_identities(dataset_df)
+
         if len(filtered_df) < 100:
-            raise ValueError(f"Dataset too small after filtering: {len(filtered_df)} samples")
-        
-        # Create disjoint drug splits for proper generalization testing
-        # Each drug appears in only one split (train, val, or test)
-        unique_drugs = filtered_df['drug_name'].unique()
-        np.random.seed(random_state)
-        shuffled_drugs = np.random.permutation(unique_drugs)
-        
-        # Calculate split sizes based on drug counts
-        n_drugs = len(shuffled_drugs)
-        test_split = max(1, int(n_drugs * SplitRatio.test_ratio.value))
-        val_split = max(1, int(n_drugs * SplitRatio.validation_ratio.value))
-        train_split = n_drugs - test_split - val_split
-        
+            raise ValueError(
+                f"Dataset too small after filtering: {len(filtered_df)} samples"
+            )
+
+        # Create disjoint identity splits for proper generalization testing
+        # Each molecular identity appears in only one split (train, val, or test)
+        unique_identities = filtered_df["drug_identity"].unique()
+        rng = np.random.default_rng(random_state)
+        shuffled_identities = rng.permutation(unique_identities)
+
+        n_identities = len(shuffled_identities)
+        test_split = max(1, int(n_identities * TEST_SPLIT_RATIO))
+        val_split = max(1, int(n_identities * VALIDATION_SPLIT_RATIO))
+        train_split = n_identities - test_split - val_split
+
         if train_split < 1:
-            raise ValueError(f"Too few drugs ({n_drugs}) for stratified splitting")
-        
-        # Assign drugs to splits ensuring disjoint sets
-        test_drugs = set(shuffled_drugs[:test_split])
-        val_drugs = set(shuffled_drugs[test_split:test_split + val_split])
-        train_drugs = set(shuffled_drugs[test_split + val_split:])
-        
-        # Split dataframe by drug assignments
-        train_df = filtered_df[filtered_df['drug_name'].isin(train_drugs)].copy()
-        val_df = filtered_df[filtered_df['drug_name'].isin(val_drugs)].copy()
-        test_df = filtered_df[filtered_df['drug_name'].isin(test_drugs)].copy()
-        
-        # Log split information
-        logging.info(f"Drug splits - Train: {len(train_drugs)}, Val: {len(val_drugs)}, Test: {len(test_drugs)}")
-        logging.info(f"Sample splits - Train: {len(train_df)}, Val: {len(val_df)}, Test: {len(test_df)}")
-        
-        # Validate disjoint drug sets
-        train_val_overlap = train_drugs.intersection(val_drugs)
-        train_test_overlap = train_drugs.intersection(test_drugs)
-        val_test_overlap = val_drugs.intersection(test_drugs)
-        
-        if train_val_overlap or train_test_overlap or val_test_overlap:
-            raise ValueError(f"Configuration error: Drug overlap between train and val: {len(train_val_overlap)} drugs")
-        
-        logging.info("✅ Drug stratification validation passed - no drug overlap detected")
-        
-        # Validate minimum samples per split
-        if len(val_df) < 20:
+            raise ValueError(
+                f"Too few drug identities ({n_identities}) for stratified splitting"
+            )
+
+        test_identities = set(shuffled_identities[:test_split])
+        train_val_identities = list(shuffled_identities[test_split:])
+        train_identities, val_identities = self._split_train_val_identities(
+            train_val_identities,
+            filtered_df,
+            val_split,
+            rng,
+        )
+
+        train_df = filtered_df[
+            filtered_df["drug_identity"].isin(train_identities)
+        ].copy()
+        val_df = filtered_df[filtered_df["drug_identity"].isin(val_identities)].copy()
+        test_df = filtered_df[filtered_df["drug_identity"].isin(test_identities)].copy()
+        self._validate_no_identity_overlap(train_df, val_df, test_df)
+
+        if len(val_df) < MIN_SPLIT_SAMPLES:
             raise ValueError(f"Validation set too small: {len(val_df)} samples")
-        if len(test_df) < 20:
+        if len(test_df) < MIN_SPLIT_SAMPLES:
             raise ValueError(f"Test set too small: {len(test_df)} samples")
-        
-        # Check drug distribution across splits
-        train_drugs = set(train_df['drug_name'].unique())
-        val_drugs = set(val_df['drug_name'].unique())
-        test_drugs = set(test_df['drug_name'].unique())
-        
-        # Ensure disjoint drug sets (no drug appears in multiple splits)
-        drug_overlap_train_val = train_drugs & val_drugs
-        drug_overlap_train_test = train_drugs & test_drugs
-        drug_overlap_val_test = val_drugs & test_drugs
-        
-        if drug_overlap_train_val:
-            raise ValueError(f"Drug overlap between train and val: {len(drug_overlap_train_val)} drugs")
-        if drug_overlap_train_test:
-            raise ValueError(f"Drug overlap between train and test: {len(drug_overlap_train_test)} drugs")  
-        if drug_overlap_val_test:
-            raise ValueError(f"Drug overlap between val and test: {len(drug_overlap_val_test)} drugs")
 
-        x_train = train_df[['drug_name', 'cell_line_name']]
-        y_train = train_df[['pic50']]
-        x_val = val_df[['drug_name', 'cell_line_name']]
-        y_val = val_df[['pic50']]
-        x_test = test_df[['drug_name', 'cell_line_name']]
-        y_test = test_df[['pic50']]
+        x_train = self._select_model_inputs(train_df)
+        y_train = train_df[["pic50"]]
+        x_val = self._select_model_inputs(val_df)
+        y_val = val_df[["pic50"]]
+        x_test = self._select_model_inputs(test_df)
+        y_test = test_df[["pic50"]]
+        train_identity_count = int(train_df["drug_identity"].nunique())
+        val_identity_count = int(val_df["drug_identity"].nunique())
+        test_identity_count = int(test_df["drug_identity"].nunique())
 
-        logging.info(f"Split sizes: Train={len(x_train)}, Val={len(x_val)}, Test={len(x_test)}")
-        logging.info(f"Drugs in sets - Train: {len(train_drugs)}, Val: {len(val_drugs)}, Test: {len(test_drugs)}")
-        
-        # Validate R² calculation prerequisites
+        logging.info(
+            "Drug-stratified split summary - samples: Train=%d, Val=%d, Test=%d | identities: Train=%d, Val=%d, Test=%d",
+            len(x_train),
+            len(x_val),
+            len(x_test),
+            train_identity_count,
+            val_identity_count,
+            test_identity_count,
+        )
+
         self._validate_r2_prerequisites(y_train, y_val, y_test)
-        
+
         return x_train, x_val, x_test, y_train, y_val, y_test
 
-    def _validate_r2_prerequisites(self, y_train, y_val, y_test):
-        """Validate that R² calculation will work properly."""
-        
-        datasets = [("training", y_train), ("validation", y_val), ("test", y_test)]
-        
-        for name, y_data in datasets:
-            y_values = y_data['pic50'].values
-            
-            # Check minimum sample size
-            if len(y_values) < 2:
-                raise ValueError(f"{name} set has < 2 samples: cannot calculate R²")
-            
-            # Check for variance (avoid division by zero)
-            if np.var(y_values) == 0:
-                logging.warning(f"{name} set has zero variance in targets")
-            
-            # Check for reasonable value range
-            if np.isnan(y_values).any():
-                raise ValueError(f"{name} set contains NaN values")
-            
-            logging.info(f"✅ {name} set: {len(y_values)} samples, "
-                        f"mean={np.mean(y_values):.3f}, "
-                        f"std={np.std(y_values):.3f}, "
-                        f"range=[{np.min(y_values):.3f}, {np.max(y_values):.3f}]")
+    def _iter_drug_kfold_splits(
+        self, dataset_df: pd.DataFrame, random_state: Optional[int]
+    ) -> Iterator[Tuple[Any, ...]]:
+        dataset_df = self._with_drug_identity(dataset_df)
+        filtered_df = self._filter_rare_identities(dataset_df)
 
-    def prepare_dataset(self, dataset_dict, split_type, batch_size, random_state, learning_task_strategy):
-        """
-        Prepare dataset iterator for a single drug-stratified split.
-        Yields ((smiles_shape, cell_line_shape), train_ds, val_ds, test_ds, y_test_fold_actual).
-        """
-        dataset_df = dataset_dict['dataset']
+        unique_identities = np.asarray(filtered_df["drug_identity"].unique())
+        requested = max(1, int(self.n_splits))
+        n_folds = min(requested, len(unique_identities))
+        if n_folds < 2:
+            x_train, x_val, x_test, y_train, y_val, y_test = self.split_dataset(
+                dataset_df, random_state
+            )
+            yield 1, 1, x_train, x_val, x_test, y_train, y_val, y_test
+            return
 
-        required_cols = ['drug_name', 'cell_line_name', 'pic50']
-        if not all(col in dataset_df.columns for col in required_cols):
-            raise ValueError(f"Dataset is missing one of the required columns: {required_cols}")
+        if n_folds != requested:
+            logging.warning(
+                "Requested n_splits=%d but only %d valid drug identities are available. Using n_splits=%d.",
+                requested,
+                len(unique_identities),
+                n_folds,
+            )
 
-        # Create a global lookup from the entire dataset for validation and test sets
-        global_drug_smiles_lookup, global_cell_features_lookup = self.create_drug_and_conv_dataset(dataset_df)
-
-        x_train, x_val, x_test, y_train, y_val, y_test = self.split_dataset(dataset_df, random_state)
-
-        # Create training-specific lookup tables to prevent data leakage
-        train_df = dataset_df.loc[x_train.index]
-        train_drug_smiles_lookup, train_cell_features_lookup = self.create_drug_and_conv_dataset(train_df)
-
-        y_train = learning_task_strategy.process_targets(y_train)
-        y_val = learning_task_strategy.process_targets(y_val)
-        y_test_processed = learning_task_strategy.process_targets(y_test)
-
-        drug_shape, cell_shape, train_dataset = self.tf_dataset_creator(
-            x_train, y_train, batch_size, train_cell_features_lookup, train_drug_smiles_lookup, learning_task_strategy, is_training=True
-        )
-        _, _, valid_dataset = self.tf_dataset_creator(
-            x_val, y_val, batch_size, global_cell_features_lookup, global_drug_smiles_lookup, learning_task_strategy, is_training=False
-        )
-        _, _, test_dataset = self.tf_dataset_creator(
-            x_test, y_test_processed, batch_size, global_cell_features_lookup, global_drug_smiles_lookup, learning_task_strategy, is_training=False
+        relative_val_size = self._relative_val_size_for_kfold(n_folds)
+        splitter = KFold(n_splits=n_folds, shuffle=True, random_state=random_state)
+        logging.info(
+            "Native drug-stratified K-Fold enabled: n_splits=%d over %d valid drug identities.",
+            n_folds,
+            len(unique_identities),
         )
 
-        yield (drug_shape, cell_shape), train_dataset, valid_dataset, test_dataset, y_test
+        for fold_idx, (train_val_idx, test_idx) in enumerate(
+            splitter.split(unique_identities), start=1
+        ):
+            fold_seed = self._fold_seed(random_state, fold_idx)
+            rng = np.random.default_rng(fold_seed)
+            test_identities = set(unique_identities[test_idx].tolist())
+            train_val_identities = list(unique_identities[train_val_idx].tolist())
+
+            val_count = max(1, int(round(len(train_val_identities) * relative_val_size)))
+            val_count = min(val_count, len(train_val_identities) - 1)
+            train_identities, val_identities = self._split_train_val_identities(
+                train_val_identities,
+                filtered_df,
+                val_count,
+                rng,
+            )
+
+            train_df = filtered_df[
+                filtered_df["drug_identity"].isin(train_identities)
+            ].copy()
+            val_df = filtered_df[
+                filtered_df["drug_identity"].isin(val_identities)
+            ].copy()
+            test_df = filtered_df[
+                filtered_df["drug_identity"].isin(test_identities)
+            ].copy()
+            self._validate_no_identity_overlap(train_df, val_df, test_df)
+
+            if len(val_df) < MIN_SPLIT_SAMPLES:
+                raise ValueError(
+                    f"Fold {fold_idx}/{n_folds} validation set too small: {len(val_df)} samples"
+                )
+            if len(test_df) < MIN_SPLIT_SAMPLES:
+                raise ValueError(
+                    f"Fold {fold_idx}/{n_folds} test set too small: {len(test_df)} samples"
+                )
+
+            x_train = self._select_model_inputs(train_df)
+            y_train = train_df[["pic50"]]
+            x_val = self._select_model_inputs(val_df)
+            y_val = val_df[["pic50"]]
+            x_test = self._select_model_inputs(test_df)
+            y_test = test_df[["pic50"]]
+            train_identity_count = int(train_df["drug_identity"].nunique())
+            val_identity_count = int(val_df["drug_identity"].nunique())
+            test_identity_count = int(test_df["drug_identity"].nunique())
+            self._validate_r2_prerequisites(y_train, y_val, y_test)
+
+            logging.info(
+                "Fold %d/%d split summary - samples: Train=%d, Val=%d, Test=%d | identities: Train=%d, Val=%d, Test=%d",
+                fold_idx,
+                n_folds,
+                len(x_train),
+                len(x_val),
+                len(x_test),
+                train_identity_count,
+                val_identity_count,
+                test_identity_count,
+            )
+
+            yield fold_idx, n_folds, x_train, x_val, x_test, y_train, y_val, y_test
+
+    def prepare_dataset(
+        self,
+        dataset_dict: Dict[str, pd.DataFrame],
+        _split_type: Optional[str],
+        batch_size: int,
+        random_state: Optional[int],
+    ) -> Iterator[Tuple[Any, ...]]:
+        """Prepare train/val/test loaders for drug-stratified folds."""
+        dataset_df = dataset_dict["dataset"]
+
+        global_drug_smiles_lookup, global_cell_features_lookup = (
+            self.create_drug_cell_dataset(dataset_df)
+        )
+
+        for (
+            fold_idx,
+            n_folds,
+            x_train,
+            x_val,
+            x_test,
+            y_train,
+            y_val,
+            y_test,
+        ) in self._iter_drug_kfold_splits(dataset_df, random_state):
+            y_test_actual = y_test.copy()
+            fold_metadata = {"fold_idx": fold_idx, "n_splits": n_folds}
+
+            if self.residual_target:
+                y_train, y_val, y_test, residual_metadata = (
+                    self._apply_global_mean_residual_targets(
+                        x_train,
+                        y_train,
+                        x_val,
+                        y_val,
+                        x_test,
+                        y_test,
+                    )
+                )
+                fold_metadata.update(residual_metadata)
+
+            train_cell_ids, val_cell_ids, test_cell_ids = self._encode_cell_identities(
+                dataset_df,
+                x_train,
+                x_val,
+                x_test,
+            )
+            logging.info(
+                "Ranking metadata (drug-stratified fold %d/%d): unique_cells=%d, train_pairs=%d",
+                fold_idx,
+                n_folds,
+                dataset_df["cell_line_name"].nunique(),
+                len(train_cell_ids),
+            )
+
+            train_df = dataset_df.loc[x_train.index]
+            train_drug_smiles_lookup, train_cell_features_lookup = (
+                self.create_drug_cell_dataset(train_df)
+            )
+            train_sample_weights = self._compute_train_sample_weights(train_df)
+
+            target_col = y_test_actual.columns[0]
+
+            mean, std = self._compute_cell_feature_stats(train_cell_features_lookup)
+            train_cell_features_lookup = self._apply_cell_feature_transform(
+                train_cell_features_lookup,
+                mean,
+                std,
+            )
+            fold_global_cell_features_lookup = self._apply_cell_feature_transform(
+                self._clone_cell_feature_lookup(global_cell_features_lookup),
+                mean,
+                std,
+            )
+
+            (
+                (drug_shape, cell_shape),
+                train_dataset,
+                valid_dataset,
+                test_dataset,
+                y_test_filtered_with_metadata,
+            ) = self._create_parallel_data_loaders(
+                x_train=x_train,
+                y_train=y_train,
+                x_val=x_val,
+                y_val=y_val,
+                x_test=x_test,
+                y_test=y_test,
+                batch_size=batch_size,
+                train_cell_features=train_cell_features_lookup,
+                train_drug_smiles=train_drug_smiles_lookup,
+                eval_cell_features=fold_global_cell_features_lookup,
+                eval_drug_smiles=global_drug_smiles_lookup,
+                y_test_actual=y_test_actual,
+                train_sample_weights=train_sample_weights,
+                train_group_ids=train_cell_ids,
+                val_group_ids=val_cell_ids,
+                test_group_ids=test_cell_ids,
+                val_cell_features=fold_global_cell_features_lookup,
+                val_drug_smiles=global_drug_smiles_lookup,
+            )
+            y_test_filtered = y_test_filtered_with_metadata[[target_col]].copy()
+
+            yield (
+                drug_shape,
+                cell_shape,
+            ), train_dataset, valid_dataset, test_dataset, y_test_filtered, fold_metadata
