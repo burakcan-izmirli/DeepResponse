@@ -1,46 +1,21 @@
-"""Base dataset strategy module."""
+"""Base dataset strategy."""
+import concurrent.futures
 import logging
 import os
-from typing import Dict, Optional
+from abc import ABC, abstractmethod
+from typing import Dict, Optional, Union
 
 import numpy as np
 import pandas as pd
 import torch
-from torch.utils.data import Dataset, DataLoader
-from abc import ABC, abstractmethod
+from torch.utils.data import DataLoader, Dataset
 
-from config.constants import DEFAULT_NUM_WORKERS
+from config.constants import DEFAULT_NUM_WORKERS, VALIDATION_SPLIT_RATIO
 from rdkit import Chem, DataStructs
 from rdkit.Chem import AllChem
 
 CELL_FEATURES_FILENAME = "cell_line_features.npz"
 GENE_AXIS_FILENAME = "gene_axis.csv"
-
-
-def _coerce_drug_id_column(
-    df: pd.DataFrame,
-    dataset_path: Optional[str] = None,
-) -> pd.DataFrame:
-    """Coerce the drug_id column to numeric values."""
-    output_df = df.copy()
-
-    if "drug_id" not in output_df.columns:
-        return output_df
-
-    output_df["drug_id"] = pd.to_numeric(output_df["drug_id"], errors="coerce")
-    valid_rows = int(output_df["drug_id"].notna().sum())
-    missing_rows = int(output_df["drug_id"].isna().sum())
-
-    if valid_rows > 0 and missing_rows == 0:
-        output_df["drug_id"] = output_df["drug_id"].astype(np.int64)
-
-    logging.info(
-        "Dataset [%s]: Found %d valid drug IDs (%d missing/NaN).",
-        dataset_path,
-        valid_rows,
-        missing_rows,
-    )
-    return output_df
 
 
 def collate_fn(batch):
@@ -77,7 +52,6 @@ class DrugCellResponseDataset(Dataset):
         smiles: np.ndarray,
         cell_features: np.ndarray,
         targets: np.ndarray,
-        drug_ids: np.ndarray = None,
         sample_weights: np.ndarray = None,
         group_ids: np.ndarray = None,
         cached_drug_embeddings: Optional[Dict[str, torch.Tensor]] = None,
@@ -85,7 +59,6 @@ class DrugCellResponseDataset(Dataset):
         self.smiles = smiles
         self.cell_features = cell_features
         self.targets = targets
-        self.drug_ids = drug_ids
         self.sample_weights = sample_weights
         self.group_ids = group_ids
         self.cached_drug_embeddings = cached_drug_embeddings or {}
@@ -137,13 +110,7 @@ class BaseDatasetStrategy(ABC):
         residual_target=False,
         n_splits=1,
     ):
-        """
-        Initialize base dataset strategy.
-
-        Args:
-            data_path: Path to the main dataset
-            evaluation_data_path: Optional path to evaluation dataset for cross-domain
-        """
+        """Initialize base dataset strategy state."""
         self.data_path = data_path
         self.evaluation_data_path = evaluation_data_path
         self.n_splits = max(1, int(n_splits))
@@ -152,11 +119,8 @@ class BaseDatasetStrategy(ABC):
         self.residual_target = residual_target
 
     def _select_model_inputs(self, dataset_df: pd.DataFrame) -> pd.DataFrame:
-        """Select model input columns, preserving drug_id when available."""
-        columns = ["drug_name", "cell_line_name"]
-        if "drug_id" in dataset_df.columns:
-            columns.append("drug_id")
-        return dataset_df[columns].copy()
+        """Select model input columns for DataLoader construction."""
+        return dataset_df[["drug_name", "cell_line_name"]].copy()
 
     def _attach_cell_features(self, dataset_df, base_dir):
         features_path = os.path.join(base_dir, CELL_FEATURES_FILENAME)
@@ -177,14 +141,25 @@ class BaseDatasetStrategy(ABC):
         dataset_df = pd.read_csv(path)
         if "cell_line_features" not in dataset_df.columns:
             dataset_df = self._attach_cell_features(dataset_df, os.path.dirname(path))
-
-        dataset_df = _coerce_drug_id_column(
-            dataset_df,
-            dataset_path=path,
-        )
         if dataset_df.empty:
             raise ValueError(f"Dataset is empty after loading: {path}")
         return dataset_df
+
+    def read_and_shuffle_dataset(
+        self, random_state: Optional[int]
+    ) -> Dict[str, Optional[pd.DataFrame]]:
+        """Read and shuffle the main dataset."""
+        try:
+            dataset_raw = self._read_dataset(self.data_path)
+        except FileNotFoundError:
+            logging.error("Dataset file not found at: %s", self.data_path)
+            raise
+
+        dataset_raw = dataset_raw.sample(frac=1, random_state=random_state).reset_index(
+            drop=True
+        )
+        logging.info("Dataset loaded with %d samples.", len(dataset_raw))
+        return {"dataset": dataset_raw, "evaluation_dataset": None}
 
     def _load_gene_axis(self, data_path):
         axis_path = os.path.join(os.path.dirname(data_path), GENE_AXIS_FILENAME)
@@ -372,6 +347,77 @@ class BaseDatasetStrategy(ABC):
 
         return hardness_scores
 
+    def _select_hard_validation_identities(
+        self,
+        dataset_df: pd.DataFrame,
+        train_val_identities: list[str],
+        requested_val_count: int,
+        target_val_rows: int,
+        rng: np.random.Generator,
+    ) -> tuple[set[str], set[str], int, Dict[str, float]]:
+        """Select hard validation identities using similarity-aware ranking."""
+        normalized_identities = [str(identity) for identity in train_val_identities]
+        if len(normalized_identities) < 2:
+            raise ValueError(
+                "Train/validation identity pool must contain at least 2 identities."
+            )
+
+        seed_val_count = min(
+            max(1, int(requested_val_count)),
+            len(normalized_identities) - 1,
+        )
+        shuffled_ids = rng.permutation(normalized_identities)
+        seed_train_ids = set(shuffled_ids[seed_val_count:])
+
+        hardness_scores = self._compute_identity_hardness_scores(
+            dataset_df,
+            normalized_identities,
+            list(seed_train_ids),
+        )
+        identity_row_counts = (
+            dataset_df["drug_identity"].astype(str).value_counts().to_dict()
+        )
+        ranked_ids = sorted(
+            normalized_identities,
+            key=lambda identity: (
+                hardness_scores.get(identity, 0.0),
+                rng.random(),
+            ),
+            reverse=True,
+        )
+
+        val_identities: set[str] = set()
+        val_rows = 0
+        for identity in ranked_ids:
+            if len(normalized_identities) - len(val_identities) <= 1:
+                break
+            val_identities.add(identity)
+            val_rows += int(identity_row_counts.get(identity, 0))
+            if val_rows >= target_val_rows and len(val_identities) >= seed_val_count:
+                break
+
+        train_identities = set(normalized_identities) - val_identities
+        return train_identities, val_identities, val_rows, hardness_scores
+
+    def _encode_cell_identities(
+        self,
+        dataset_df: pd.DataFrame,
+        x_train: pd.DataFrame,
+        x_val: pd.DataFrame,
+        x_test: pd.DataFrame,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Encode cell_line_name values as integer IDs for ranking metadata."""
+        all_cells = pd.Index(dataset_df["cell_line_name"].astype(str).unique())
+        cell_to_id = {cell_name: idx for idx, cell_name in enumerate(all_cells)}
+
+        def encode(split_df: pd.DataFrame) -> np.ndarray:
+            encoded = split_df["cell_line_name"].astype(str).map(cell_to_id)
+            if encoded.isna().any():
+                raise ValueError("Found cell lines not present in dataset cell index.")
+            return encoded.to_numpy(dtype=np.int32)
+
+        return encode(x_train), encode(x_val), encode(x_test)
+
     def _compute_train_sample_weights(
         self,
         train_df,
@@ -464,10 +510,7 @@ class BaseDatasetStrategy(ABC):
         x_test,
         y_test,
     ):
-        """
-        Build residual targets using train-set global mean only:
-        y_res = y - mean(y_train), and restore by adding the same mean.
-        """
+        """Build residual targets using the training-set global mean."""
         target_col = y_train.columns[0]
 
         y_train_numeric = pd.to_numeric(
@@ -505,6 +548,37 @@ class BaseDatasetStrategy(ABC):
             "fallback_global_mean": target_mean,
         }
         return y_train_residual, y_val_residual, y_test_residual, residual_metadata
+
+    def _validate_r2_prerequisites(
+        self,
+        y_train: pd.DataFrame,
+        y_val: pd.DataFrame,
+        y_test: pd.DataFrame,
+    ) -> None:
+        """Validate target distributions for stable R2 computation."""
+        datasets = [("training", y_train), ("validation", y_val), ("test", y_test)]
+
+        for name, y_data in datasets:
+            y_values = y_data["pic50"].values
+
+            if len(y_values) < 2:
+                raise ValueError(f"{name} set has < 2 samples: cannot calculate R2")
+
+            if np.var(y_values) == 0:
+                logging.warning("%s set has zero variance in targets", name)
+
+            if np.isnan(y_values).any():
+                raise ValueError(f"{name} set contains NaN values")
+
+            logging.info(
+                "%s set: %d samples, mean=%.3f, std=%.3f, range=[%.3f, %.3f]",
+                name,
+                len(y_values),
+                float(np.mean(y_values)),
+                float(np.std(y_values)),
+                float(np.min(y_values)),
+                float(np.max(y_values)),
+            )
 
     def _stack_cell_features(self, cell_features_lookup, cell_line_names=None):
         if cell_line_names is None:
@@ -572,14 +646,41 @@ class BaseDatasetStrategy(ABC):
 
         return cell_features_lookup.apply(transform)
 
+    @staticmethod
+    def _relative_val_size_for_kfold(n_splits: int) -> float:
+        outer_test_ratio = 1.0 / float(max(2, n_splits))
+        relative = VALIDATION_SPLIT_RATIO / max(1e-6, 1.0 - outer_test_ratio)
+        return float(min(max(relative, 1e-3), 0.5))
+
+    @staticmethod
+    def _fold_seed(random_state: Optional[int], fold_idx: int) -> Optional[int]:
+        if random_state is None:
+            return None
+        return int(random_state) + int(fold_idx)
+
+    @staticmethod
+    def _clone_cell_feature_lookup(
+        cell_features_lookup: Union[pd.Series, Dict[str, np.ndarray]],
+    ) -> Union[pd.Series, Dict[str, np.ndarray]]:
+        if hasattr(cell_features_lookup, "apply"):
+            return cell_features_lookup.apply(
+                lambda value: (
+                    np.array(value, copy=True)
+                    if isinstance(value, np.ndarray)
+                    else np.asarray(value).copy()
+                )
+            )
+        return {
+            key: (
+                np.array(value, copy=True)
+                if isinstance(value, np.ndarray)
+                else np.asarray(value).copy()
+            )
+            for key, value in cell_features_lookup.items()
+        }
+
     @abstractmethod
     def split_dataset(self, dataset, *args, **kwargs): ...
-
-    @abstractmethod
-    def create_splitter(self, dataset, random_state): ...
-
-    @abstractmethod
-    def read_and_shuffle_dataset(self, random_state): ...
 
     @abstractmethod
     def prepare_dataset(self, dataset_dict, split_type, batch_size, random_state): ...
@@ -699,11 +800,6 @@ class BaseDatasetStrategy(ABC):
             x_data_filtered["drug_name"].map(drug_smiles_lookup).tolist()
         )
         targets = y_data_filtered.to_numpy(dtype=np.float32)
-        drug_ids = (
-            pd.to_numeric(x_data_filtered["drug_id"], errors="coerce").to_numpy()
-            if "drug_id" in x_data_filtered.columns
-            else None
-        )
 
         # Ensure targets have the correct shape
         if targets.ndim == 1:
@@ -714,7 +810,6 @@ class BaseDatasetStrategy(ABC):
             smiles=drug_smiles,
             cell_features=cell_features,
             targets=targets,
-            drug_ids=drug_ids,
             sample_weights=sample_weights_filtered,
             group_ids=group_ids_filtered,
         )
@@ -747,3 +842,77 @@ class BaseDatasetStrategy(ABC):
             )
 
         return drug_shape, cell_shape, dataloader
+
+    def _create_parallel_data_loaders(
+        self,
+        x_train,
+        y_train,
+        x_val,
+        y_val,
+        x_test,
+        y_test,
+        batch_size,
+        train_cell_features,
+        train_drug_smiles,
+        eval_cell_features,
+        eval_drug_smiles,
+        y_test_actual,
+        train_sample_weights=None,
+        train_group_ids=None,
+        val_group_ids=None,
+        test_group_ids=None,
+        val_cell_features=None,
+        val_drug_smiles=None,
+    ):
+        """Create train/validation/test dataloaders in parallel."""
+        val_cell_features = (
+            train_cell_features if val_cell_features is None else val_cell_features
+        )
+        val_drug_smiles = train_drug_smiles if val_drug_smiles is None else val_drug_smiles
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+            future_train = executor.submit(
+                self.create_data_loader,
+                x_train,
+                y_train,
+                batch_size,
+                train_cell_features,
+                train_drug_smiles,
+                is_training=True,
+                sample_weights=train_sample_weights,
+                group_ids=train_group_ids,
+            )
+            future_val = executor.submit(
+                self.create_data_loader,
+                x_val,
+                y_val,
+                batch_size,
+                val_cell_features,
+                val_drug_smiles,
+                is_training=False,
+                group_ids=val_group_ids,
+            )
+            future_test = executor.submit(
+                self.create_data_loader,
+                x_test,
+                y_test,
+                batch_size,
+                eval_cell_features,
+                eval_drug_smiles,
+                is_training=False,
+                group_ids=test_group_ids,
+                return_filtered_data=True,
+                original_y_data_df=y_test_actual,
+            )
+
+            drug_shape, cell_shape, train_dataset = future_train.result()
+            _, _, valid_dataset = future_val.result()
+            _, _, test_dataset, _, y_test_filtered = future_test.result()
+
+        return (
+            (drug_shape, cell_shape),
+            train_dataset,
+            valid_dataset,
+            test_dataset,
+            y_test_filtered,
+        )
