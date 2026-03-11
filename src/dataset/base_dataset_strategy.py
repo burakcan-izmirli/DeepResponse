@@ -16,6 +16,7 @@ from rdkit.Chem import AllChem
 
 CELL_FEATURES_FILENAME = "cell_line_features.npz"
 GENE_AXIS_FILENAME = "gene_axis.csv"
+PARALLEL_LOADER_WORKERS = 3
 
 
 def collate_fn(batch):
@@ -175,6 +176,16 @@ class BaseDatasetStrategy(ABC):
         features_npz = np.load(features_path, allow_pickle=True)
         return [str(g) for g in features_npz["__gene_axis__"].tolist() if str(g)]
 
+    @staticmethod
+    def _map_feature_lookup(cell_features_lookup, transform):
+        if hasattr(cell_features_lookup, "apply"):
+            return cell_features_lookup.apply(transform)
+        if isinstance(cell_features_lookup, dict):
+            return {key: transform(value) for key, value in cell_features_lookup.items()}
+        raise TypeError(
+            f"Unsupported cell feature lookup type: {type(cell_features_lookup).__name__}"
+        )
+
     def _align_cell_feature_lookup(
         self, cell_features_lookup, source_axis, target_axis
     ):
@@ -201,7 +212,7 @@ class BaseDatasetStrategy(ABC):
                 f"{len(source_axis)}."
             )
 
-        return cell_features_lookup.apply(transform)
+        return self._map_feature_lookup(cell_features_lookup, transform)
 
     @staticmethod
     def _normalize_smiles_for_identity(smiles_value):
@@ -501,7 +512,7 @@ class BaseDatasetStrategy(ABC):
         )
         return sample_weights
 
-    def _apply_cell_mean_residual_targets(
+    def _apply_global_mean_residual_targets(
         self,
         x_train,
         y_train,
@@ -581,14 +592,28 @@ class BaseDatasetStrategy(ABC):
             )
 
     def _stack_cell_features(self, cell_features_lookup, cell_line_names=None):
-        if cell_line_names is None:
-            selected = cell_features_lookup
+        if hasattr(cell_features_lookup, "loc"):
+            if cell_line_names is None:
+                selected = cell_features_lookup
+            else:
+                name_index = pd.Index(cell_line_names)
+                selected = cell_features_lookup.loc[
+                    cell_features_lookup.index.intersection(name_index)
+                ]
+            arrays = [arr for arr in selected.values if isinstance(arr, np.ndarray)]
+        elif isinstance(cell_features_lookup, dict):
+            if cell_line_names is None:
+                values = cell_features_lookup.values()
+            else:
+                selected_keys = pd.Index(cell_line_names).intersection(
+                    pd.Index(cell_features_lookup.keys())
+                )
+                values = [cell_features_lookup[key] for key in selected_keys]
+            arrays = [arr for arr in values if isinstance(arr, np.ndarray)]
         else:
-            name_index = pd.Index(cell_line_names)
-            selected = cell_features_lookup.loc[
-                cell_features_lookup.index.intersection(name_index)
-            ]
-        arrays = [arr for arr in selected.values if isinstance(arr, np.ndarray)]
+            raise TypeError(
+                f"Unsupported cell feature lookup type: {type(cell_features_lookup).__name__}"
+            )
         if not arrays:
             raise ValueError("No cell line features available for normalization.")
         return np.stack(arrays, axis=0)
@@ -644,7 +669,7 @@ class BaseDatasetStrategy(ABC):
                 np.float32
             )
 
-        return cell_features_lookup.apply(transform)
+        return self._map_feature_lookup(cell_features_lookup, transform)
 
     @staticmethod
     def _relative_val_size_for_kfold(n_splits: int) -> float:
@@ -715,7 +740,9 @@ class BaseDatasetStrategy(ABC):
     ):
         """Create DataLoader from prepared split inputs."""
         logging.info(
-            f"Creating DataLoader. Training: {is_training}, Samples: {len(x_data_df)}"
+            "Creating DataLoader. Training: %s, Samples: %d",
+            is_training,
+            len(x_data_df),
         )
 
         if len(x_data_df) != len(y_data_df):
@@ -870,7 +897,9 @@ class BaseDatasetStrategy(ABC):
         )
         val_drug_smiles = train_drug_smiles if val_drug_smiles is None else val_drug_smiles
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=PARALLEL_LOADER_WORKERS
+        ) as executor:
             future_train = executor.submit(
                 self.create_data_loader,
                 x_train,
