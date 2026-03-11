@@ -1,44 +1,64 @@
 """Cell stratified dataset strategy."""
 
 import logging
-from typing import Any, Dict, Iterator, Optional, Tuple, Union
+from typing import Any, Dict, Iterator, Optional, Tuple
 
-import numpy as np
 import pandas as pd
 from sklearn.model_selection import KFold, train_test_split
 
 from config.constants import TEST_SPLIT_RATIO, VALIDATION_SPLIT_RATIO
 from src.dataset.base_dataset_strategy import BaseDatasetStrategy
 
+MIN_UNIQUE_CELLS_FOR_SPLIT = 3
+MIN_TRAIN_VAL_CELLS = 2
+
 
 class CellStratifiedDatasetStrategy(BaseDatasetStrategy):
     """Cell stratified dataset strategy."""
 
-    def read_and_shuffle_dataset(self, random_state: Optional[int]) -> Dict[str, Any]:
-        dataset_raw = self._read_dataset(self.data_path)
+    @staticmethod
+    def _build_cell_split_frames(
+        dataset_df: pd.DataFrame,
+        train_cells,
+        val_cells,
+        test_cells,
+    ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+        train_df = dataset_df[dataset_df["cell_line_name"].isin(train_cells)]
+        val_df = dataset_df[dataset_df["cell_line_name"].isin(val_cells)]
+        test_df = dataset_df[dataset_df["cell_line_name"].isin(test_cells)]
+        return train_df, val_df, test_df
 
-        dataset_raw = dataset_raw.sample(frac=1, random_state=random_state).reset_index(
-            drop=True
-        )
-        logging.info("Dataset loaded with %d samples.", len(dataset_raw))
-        return {"dataset": dataset_raw, "evaluation_dataset": None}
-
-    def create_splitter(
-        self, _dataset: pd.DataFrame, _random_state: Optional[int] = None
-    ) -> None:
-        return None
+    def _build_xy_triplet(
+        self,
+        train_df: pd.DataFrame,
+        val_df: pd.DataFrame,
+        test_df: pd.DataFrame,
+    ) -> Tuple[pd.DataFrame, ...]:
+        x_train = self._select_model_inputs(train_df)
+        y_train = train_df[["pic50"]]
+        x_val = self._select_model_inputs(val_df)
+        y_val = val_df[["pic50"]]
+        x_test = self._select_model_inputs(test_df)
+        y_test = test_df[["pic50"]]
+        return x_train, x_val, x_test, y_train, y_val, y_test
 
     def split_dataset(
         self,
         dataset_df: pd.DataFrame,
         random_state: Optional[int],
     ) -> Tuple[pd.DataFrame, ...]:
+        """Split dataset into train/validation/test sets by cell line."""
         unique_cells = dataset_df["cell_line_name"].unique()
 
         logging.info(
             "Cell-stratified split input - total unique cell lines=%d",
             len(unique_cells),
         )
+        if len(unique_cells) < MIN_UNIQUE_CELLS_FOR_SPLIT:
+            raise ValueError(
+                "Cell-stratified split requires at least %d unique cell lines (found %d)."
+                % (MIN_UNIQUE_CELLS_FOR_SPLIT, len(unique_cells))
+            )
 
         train_cells, test_cells = train_test_split(
             unique_cells,
@@ -51,16 +71,17 @@ class CellStratifiedDatasetStrategy(BaseDatasetStrategy):
             random_state=random_state,
         )
 
-        train_df = dataset_df[dataset_df["cell_line_name"].isin(train_cells)]
-        val_df = dataset_df[dataset_df["cell_line_name"].isin(val_cells)]
-        test_df = dataset_df[dataset_df["cell_line_name"].isin(test_cells)]
-
-        x_train = self._select_model_inputs(train_df)
-        y_train = train_df[["pic50"]]
-        x_val = self._select_model_inputs(val_df)
-        y_val = val_df[["pic50"]]
-        x_test = self._select_model_inputs(test_df)
-        y_test = test_df[["pic50"]]
+        train_df, val_df, test_df = self._build_cell_split_frames(
+            dataset_df,
+            train_cells,
+            val_cells,
+            test_cells,
+        )
+        x_train, x_val, x_test, y_train, y_val, y_test = self._build_xy_triplet(
+            train_df,
+            val_df,
+            test_df,
+        )
 
         logging.info(
             "Cell-stratified sample counts - Train=%d, Validation=%d, Test=%d",
@@ -69,45 +90,13 @@ class CellStratifiedDatasetStrategy(BaseDatasetStrategy):
             len(x_test),
         )
         logging.info(
-            "Cell lines in sets - Train: %d, Val: %d, Test: %d",
+            "Cell-stratified unique cell-line counts - Train=%d, Validation=%d, Test=%d",
             len(train_cells),
             len(val_cells),
             len(test_cells),
         )
+        self._validate_r2_prerequisites(y_train, y_val, y_test)
         return x_train, x_val, x_test, y_train, y_val, y_test
-
-    @staticmethod
-    def _relative_val_size_for_kfold(n_splits: int) -> float:
-        outer_test_ratio = 1.0 / float(max(2, n_splits))
-        relative = VALIDATION_SPLIT_RATIO / max(1e-6, 1.0 - outer_test_ratio)
-        return float(min(max(relative, 1e-3), 0.5))
-
-    @staticmethod
-    def _fold_seed(random_state: Optional[int], fold_idx: int) -> Optional[int]:
-        if random_state is None:
-            return None
-        return int(random_state) + int(fold_idx)
-
-    @staticmethod
-    def _clone_cell_feature_lookup(
-        cell_features_lookup: Union[pd.Series, Dict[str, np.ndarray]],
-    ) -> Union[pd.Series, Dict[str, np.ndarray]]:
-        if hasattr(cell_features_lookup, "apply"):
-            return cell_features_lookup.apply(
-                lambda value: (
-                    np.array(value, copy=True)
-                    if isinstance(value, np.ndarray)
-                    else np.asarray(value).copy()
-                )
-            )
-        return {
-            key: (
-                np.array(value, copy=True)
-                if isinstance(value, np.ndarray)
-                else np.asarray(value).copy()
-            )
-            for key, value in cell_features_lookup.items()
-        }
 
     def _iter_cell_kfold_splits(
         self,
@@ -146,7 +135,7 @@ class CellStratifiedDatasetStrategy(BaseDatasetStrategy):
             train_val_cells = unique_cells[train_val_cell_idx]
             test_cells = unique_cells[test_cell_idx]
 
-            if len(train_val_cells) < 2:
+            if len(train_val_cells) < MIN_TRAIN_VAL_CELLS:
                 raise ValueError(
                     f"Fold {fold_idx}/{n_folds} has insufficient train/val cells ({len(train_val_cells)})."
                 )
@@ -157,16 +146,17 @@ class CellStratifiedDatasetStrategy(BaseDatasetStrategy):
                 random_state=self._fold_seed(random_state, fold_idx),
             )
 
-            train_df = dataset_df[dataset_df["cell_line_name"].isin(train_cells)]
-            val_df = dataset_df[dataset_df["cell_line_name"].isin(val_cells)]
-            test_df = dataset_df[dataset_df["cell_line_name"].isin(test_cells)]
-
-            x_train = self._select_model_inputs(train_df)
-            y_train = train_df[["pic50"]]
-            x_val = self._select_model_inputs(val_df)
-            y_val = val_df[["pic50"]]
-            x_test = self._select_model_inputs(test_df)
-            y_test = test_df[["pic50"]]
+            train_df, val_df, test_df = self._build_cell_split_frames(
+                dataset_df,
+                train_cells,
+                val_cells,
+                test_cells,
+            )
+            x_train, x_val, x_test, y_train, y_val, y_test = self._build_xy_triplet(
+                train_df,
+                val_df,
+                test_df,
+            )
 
             logging.info(
                 "Cell-stratified fold %d/%d sample counts - Train=%d, Validation=%d, Test=%d",
@@ -185,11 +175,12 @@ class CellStratifiedDatasetStrategy(BaseDatasetStrategy):
                 len(test_cells),
             )
 
+            self._validate_r2_prerequisites(y_train, y_val, y_test)
             yield fold_idx, n_folds, x_train, x_val, x_test, y_train, y_val, y_test
 
     def prepare_dataset(
         self,
-        dataset_dict: Dict[str, Any],
+        dataset_dict: Dict[str, pd.DataFrame],
         _split_type: Optional[str],
         batch_size: int,
         random_state: Optional[int],
@@ -212,11 +203,41 @@ class CellStratifiedDatasetStrategy(BaseDatasetStrategy):
             y_test,
         ) in self._iter_cell_kfold_splits(dataset_df, random_state):
             y_test_actual = y_test.copy()
+            target_col = y_test_actual.columns[0]
+            fold_metadata = {"fold_idx": fold_idx, "n_splits": n_folds}
+
+            if self.residual_target:
+                y_train, y_val, y_test, residual_metadata = (
+                    self._apply_global_mean_residual_targets(
+                        x_train,
+                        y_train,
+                        x_val,
+                        y_val,
+                        x_test,
+                        y_test,
+                    )
+                )
+                fold_metadata.update(residual_metadata)
+
+            train_cell_ids, val_cell_ids, test_cell_ids = self._encode_cell_identities(
+                dataset_df,
+                x_train,
+                x_val,
+                x_test,
+            )
+            logging.info(
+                "Ranking metadata (cell-stratified fold %d/%d): unique_cells=%d, train_pairs=%d",
+                fold_idx,
+                n_folds,
+                dataset_df["cell_line_name"].nunique(),
+                len(train_cell_ids),
+            )
 
             train_df = dataset_df.loc[x_train.index]
             train_drug_smiles_lookup, train_cell_features_lookup = (
                 self.create_drug_cell_dataset(train_df)
             )
+            train_sample_weights = self._compute_train_sample_weights(train_df)
 
             mean, std = self._compute_cell_feature_stats(train_cell_features_lookup)
             train_cell_features_lookup = self._apply_cell_feature_transform(
@@ -230,37 +251,35 @@ class CellStratifiedDatasetStrategy(BaseDatasetStrategy):
                 std,
             )
 
-            drug_shape, cell_shape, train_dataset = self.create_data_loader(
-                x_train,
-                y_train,
-                batch_size,
-                train_cell_features_lookup,
-                train_drug_smiles_lookup,
-                is_training=True,
+            (
+                (drug_shape, cell_shape),
+                train_dataset,
+                valid_dataset,
+                test_dataset,
+                y_test_filtered_with_metadata,
+            ) = self._create_parallel_data_loaders(
+                x_train=x_train,
+                y_train=y_train,
+                x_val=x_val,
+                y_val=y_val,
+                x_test=x_test,
+                y_test=y_test,
+                batch_size=batch_size,
+                train_cell_features=train_cell_features_lookup,
+                train_drug_smiles=train_drug_smiles_lookup,
+                eval_cell_features=fold_global_cell_features_lookup,
+                eval_drug_smiles=global_drug_smiles_lookup,
+                y_test_actual=y_test_actual,
+                train_sample_weights=train_sample_weights,
+                train_group_ids=train_cell_ids,
+                val_group_ids=val_cell_ids,
+                test_group_ids=test_cell_ids,
+                val_cell_features=fold_global_cell_features_lookup,
+                val_drug_smiles=global_drug_smiles_lookup,
             )
-            _, _, valid_dataset = self.create_data_loader(
-                x_val,
-                y_val,
-                batch_size,
-                fold_global_cell_features_lookup,
-                global_drug_smiles_lookup,
-                is_training=False,
-            )
-            _, _, test_dataset, _, y_test_filtered = self.create_data_loader(
-                x_test,
-                y_test,
-                batch_size,
-                fold_global_cell_features_lookup,
-                global_drug_smiles_lookup,
-                is_training=False,
-                return_filtered_data=True,
-                original_y_data_df=y_test_actual,
-            )
+            y_test_filtered = y_test_filtered_with_metadata[[target_col]].copy()
 
             yield (
                 drug_shape,
                 cell_shape,
-            ), train_dataset, valid_dataset, test_dataset, y_test_filtered, {
-                "fold_idx": fold_idx,
-                "n_splits": n_folds,
-            }
+            ), train_dataset, valid_dataset, test_dataset, y_test_filtered, fold_metadata
