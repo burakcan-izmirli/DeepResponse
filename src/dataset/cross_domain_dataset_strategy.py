@@ -1,37 +1,31 @@
-"""Cross domain dataset strategy."""
+"""Cross-domain dataset strategy."""
 
-from typing import Any, Dict, Optional, Tuple
+import logging
+from typing import Any, Dict, Iterator, Optional, Tuple
 
 import pandas as pd
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import GroupShuffleSplit
 
 from config.constants import VALIDATION_SPLIT_RATIO
 from src.dataset.base_dataset_strategy import BaseDatasetStrategy
 
 
 class CrossDomainDatasetStrategy(BaseDatasetStrategy):
-    """Cross domain dataset strategy."""
+    """Cross-domain dataset strategy."""
 
     def read_and_shuffle_dataset(self, random_state: Optional[int]) -> Dict[str, Any]:
         """Read and shuffle dataset."""
-
-        dataset_raw = self._read_dataset(self.data_path)
-        dataset_raw = dataset_raw.sample(frac=1, random_state=random_state).reset_index(
-            drop=True
-        )
+        dataset_dict = super().read_and_shuffle_dataset(random_state)
 
         evaluation_dataset_raw = self._read_dataset(self.evaluation_data_path)
         evaluation_dataset_raw = evaluation_dataset_raw.sample(
             frac=1, random_state=random_state
         ).reset_index(drop=True)
-
-        return {"dataset": dataset_raw, "evaluation_dataset": evaluation_dataset_raw}
-
-    def create_splitter(
-        self, _dataset: pd.DataFrame, _random_state: Optional[int] = None
-    ) -> None:
-        """Unused for this strategy."""
-        return None
+        logging.info(
+            "Evaluation dataset loaded with %d samples.", len(evaluation_dataset_raw)
+        )
+        dataset_dict["evaluation_dataset"] = evaluation_dataset_raw
+        return dataset_dict
 
     def split_dataset(
         self,
@@ -41,16 +35,26 @@ class CrossDomainDatasetStrategy(BaseDatasetStrategy):
     ) -> Tuple[pd.DataFrame, ...]:
         """Split source data into train/val and use target data as test."""
 
-        x_train_df, x_val_df, y_train_df, y_val_df = train_test_split(
-            self._select_model_inputs(dataset),
-            dataset[["pic50"]],
+        dataset_with_identity = self._with_drug_identity(dataset)
+        groups = self._pair_group_series(dataset_with_identity)
+        x_all = self._select_model_inputs(dataset_with_identity)
+        y_all = dataset_with_identity[["pic50"]]
+
+        splitter = GroupShuffleSplit(
+            n_splits=1,
             test_size=VALIDATION_SPLIT_RATIO,
             random_state=random_state,
         )
+        train_idx, val_idx = next(splitter.split(x_all, y_all, groups=groups))
+        x_train_df = x_all.iloc[train_idx]
+        y_train_df = y_all.iloc[train_idx]
+        x_val_df = x_all.iloc[val_idx]
+        y_val_df = y_all.iloc[val_idx]
 
         x_test_df = self._select_model_inputs(evaluation_dataset)
         y_test_df = evaluation_dataset[["pic50"]]
 
+        self._validate_r2_prerequisites(y_train_df, y_val_df, y_test_df)
         return x_train_df, x_val_df, x_test_df, y_train_df, y_val_df, y_test_df
 
     def prepare_dataset(
@@ -59,7 +63,7 @@ class CrossDomainDatasetStrategy(BaseDatasetStrategy):
         _split_type: Optional[str],
         batch_size: int,
         random_state: Optional[int],
-    ) -> Tuple[Any, ...]:
+    ) -> Iterator[Tuple[Any, ...]]:
         """Prepare train/val/test loaders for cross-domain validation."""
 
         dataset, evaluation_dataset = (
@@ -89,7 +93,7 @@ class CrossDomainDatasetStrategy(BaseDatasetStrategy):
             eval_cell_features_lookup, eval_axis, intersection
         )
 
-        allowed_cols = {"drug_name", "cell_line_name", "pic50", "drug_id", "smiles"}
+        allowed_cols = {"drug_name", "cell_line_name", "pic50", "smiles"}
         dataset = dataset[[col for col in dataset.columns if col in allowed_cols]]
         evaluation_dataset = evaluation_dataset[
             [col for col in evaluation_dataset.columns if col in allowed_cols]
@@ -100,6 +104,29 @@ class CrossDomainDatasetStrategy(BaseDatasetStrategy):
             dataset, evaluation_dataset, random_state
         )
         y_test_actual = y_test.copy()
+        fold_metadata = {"fold_idx": 1, "n_splits": 1}
+
+        if self.residual_target:
+            y_train, y_val, y_test, residual_metadata = (
+                self._apply_global_mean_residual_targets(
+                    x_train,
+                    y_train,
+                    x_val,
+                    y_val,
+                    x_test,
+                    y_test,
+                )
+            )
+            fold_metadata.update(residual_metadata)
+
+        combined_df = pd.concat([dataset, evaluation_dataset], ignore_index=True)
+        train_cell_ids, val_cell_ids, test_cell_ids = self._encode_cell_identities(
+            combined_df,
+            x_train,
+            x_val,
+            x_test,
+        )
+        train_sample_weights = self._compute_train_sample_weights(dataset.loc[x_train.index])
 
         mean, std = self._compute_cell_feature_stats(
             cell_features_lookup, x_train["cell_line_name"]
@@ -113,7 +140,7 @@ class CrossDomainDatasetStrategy(BaseDatasetStrategy):
             std,
         )
 
-        return self._create_parallel_data_loaders(
+        result = self._create_parallel_data_loaders(
             x_train=x_train,
             y_train=y_train,
             x_val=x_val,
@@ -126,4 +153,9 @@ class CrossDomainDatasetStrategy(BaseDatasetStrategy):
             eval_cell_features=eval_cell_features_lookup,
             eval_drug_smiles=eval_drug_smiles_lookup,
             y_test_actual=y_test_actual,
+            train_sample_weights=train_sample_weights,
+            train_group_ids=train_cell_ids,
+            val_group_ids=val_cell_ids,
+            test_group_ids=test_cell_ids,
         )
+        yield (*result, fold_metadata)
