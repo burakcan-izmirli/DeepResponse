@@ -106,7 +106,7 @@ class CellLineEncoder(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """(batch, 4, n_genes) → (batch, embed_dim)."""
+        """Encode multi-omics features into fixed-size embeddings."""
         if x.dim() != 3 or x.shape[1] != self.in_channels or x.shape[2] != self.n_genes:
             raise ValueError(
                 f"Expected (batch, {self.in_channels}, {self.n_genes}), "
