@@ -91,16 +91,14 @@ class EarlyStopping:
         self.patience = patience
         self.min_delta = min_delta
         self.mode = mode
-        self.counter = 0
         self.best_score: float | None = None
         self.best_epoch = 0
 
-    def __call__(self, score: float, epoch: int | None = None) -> bool:
+    def __call__(self, score: float, epoch: int) -> bool:
         """Return True when training should stop."""
         if self.best_score is None:
             self.best_score = score
-            if epoch is not None:
-                self.best_epoch = epoch
+            self.best_epoch = epoch
             return False
 
         if self.mode == "max":
@@ -110,13 +108,10 @@ class EarlyStopping:
 
         if improved:
             self.best_score = score
-            if epoch is not None:
-                self.best_epoch = epoch
-            self.counter = 0
-        else:
-            self.counter += 1
+            self.best_epoch = epoch
+            return False
 
-        return self.counter >= self.patience
+        return (epoch - self.best_epoch) >= self.patience
 
 
 @dataclass
