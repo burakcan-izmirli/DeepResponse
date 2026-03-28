@@ -19,7 +19,7 @@ from config.constants import (
 )
 from src.evaluation import evaluate_test_metrics
 from src.models import create_model
-from src.repurposing.prediction_manager import PredictionManager
+from src.repurposing.inference_engine import RepurposingInferenceEngine
 from src.training.base_training_strategy import (
     BaseTrainingStrategy,
     pairwise_ranking_loss,
@@ -39,7 +39,7 @@ class StratifiedSplitTrainingStrategy(BaseTrainingStrategy):
     ) -> list[dict[str, float | str]]:
         """Train and evaluate model across stratified folds."""
         logging.info("Run isolation ID: %s", self._run_id)
-        self.prediction_manager = PredictionManager(
+        self.prediction_manager = RepurposingInferenceEngine(
             data_source=str(strategy_creator.data_source),
             device=self.device,
         )
@@ -180,12 +180,11 @@ class StratifiedSplitTrainingStrategy(BaseTrainingStrategy):
             y_true,
             y_pred,
             comet_logger,
-            {
-                "split_type": split_type,
-                "trainable_encoder_layers": strategy_creator.trainable_encoder_layers,
-                "data_source": strategy_creator.data_source,
-                "fold_idx": fold_idx,
-            },
+            split_type=split_type,
+            trainable_encoder_layers=int(strategy_creator.trainable_encoder_layers),
+            data_source=str(strategy_creator.data_source),
+            fold_idx=fold_idx,
+            output_dir=self._get_fold_results_dir(strategy_creator, fold_idx),
         )
         self._attach_best_summary_to_test_metrics(test_metrics, train_summary)
 
