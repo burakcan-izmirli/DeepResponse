@@ -1,6 +1,9 @@
 """Project-wide constants for options, splitting, training, and evaluation."""
 
+from pathlib import Path
 from typing import Set
+
+PROJECT_ROOT: Path = Path(__file__).resolve().parent.parent
 
 # --- 1. Argument Validations & Allowed Choices ---
 DATA_SOURCES: Set[str] = {"depmap", "gdsc", "ccle"}
@@ -71,3 +74,4 @@ CACHE_EMBEDDING_BATCH_MAX: int = 256
 # --- 4. Paths & Artifacts ---
 DIR_LOGS: str = "logs"
 DIR_CHECKPOINTS: str = "checkpoints"
+DIR_PRETRAINED_SELFORMER: Path = PROJECT_ROOT / "pretrained" / "selformer"
