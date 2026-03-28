@@ -11,12 +11,10 @@ class DeepResponsePipeline:
     """End-to-end training/evaluation pipeline for DeepResponse."""
 
     def __init__(self, args: Namespace) -> None:
-        from src.strategy_creator import (
-            StrategyCreator,
-        )
+        from src.strategy_resolver import StrategyResolver
 
         self.args = args
-        self.strategy_creator = StrategyCreator(args)
+        self.strategy_creator = StrategyResolver(args)
 
     def execute(self) -> None:
         """
