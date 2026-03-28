@@ -1,5 +1,5 @@
-"""Repurposing prediction utilities."""
+"""Repurposing inference utilities."""
 
-from src.repurposing.prediction_manager import PredictionManager
+from src.repurposing.inference_engine import RepurposingInferenceEngine
 
-__all__ = ["PredictionManager"]
+__all__ = ["RepurposingInferenceEngine"]
